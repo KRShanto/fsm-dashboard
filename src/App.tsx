@@ -45,12 +45,14 @@ function App() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
         <div className="text-center p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 mb-3">
             Fire & Safety Management
           </h1>
-          <p className="text-gray-600">Welcome to the dashboard</p>
-          <div className="mt-4 flex justify-center">
-            <div className="w-8 h-8 border-4 border-t-indigo-600 border-b-indigo-600 border-l-gray-200 border-r-gray-200 rounded-full animate-spin"></div>
+          <p className="text-xl text-gray-600 font-medium">
+            Welcome to the dashboard
+          </p>
+          <div className="mt-6 flex justify-center">
+            <div className="w-10 h-10 border-4 border-t-indigo-600 border-b-indigo-600 border-l-gray-200 border-r-gray-200 rounded-full animate-spin"></div>
           </div>
         </div>
       </div>
