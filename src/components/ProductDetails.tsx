@@ -24,43 +24,39 @@ export default function ProductDetails({
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  useEffect(() => {
-    async function loadProductData() {
-      try {
-        setLoading(true);
-        // Load product details
-        const productData = await getProductById(productId);
-        if (!productData) {
-          setError("Product not found");
-          setLoading(false);
-          return;
-        }
-
-        setProduct(productData);
-
-        // Get product images
-        if (productData.images) {
-          setImages(productData.images);
-        }
-
-        // Load documentation
-        const docsData = await getDocumentationByProductId(productId);
-        setDocumentation(docsData);
-
+  const loadProductData = async () => {
+    try {
+      setLoading(true);
+      // Load product details
+      const productData = await getProductById(productId);
+      if (!productData) {
+        setError("Product not found");
         setLoading(false);
-      } catch (error) {
-        console.error("Error loading product:", error);
-        setError("Failed to load product details");
-        setLoading(false);
+        return;
       }
-    }
 
+      setProduct(productData);
+
+      // Get product images
+      if (productData.images) {
+        setImages(productData.images);
+      }
+
+      // Load documentation
+      const docsData = await getDocumentationByProductId(productId);
+      setDocumentation(docsData);
+
+      setLoading(false);
+    } catch (error) {
+      console.error("Error loading product:", error);
+      setError("Failed to load product details");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadProductData();
   }, [productId]);
-
-  const handleDocDelete = (docId: number) => {
-    setDocumentation((docs) => docs.filter((doc) => doc.id !== docId));
-  };
 
   if (loading) {
     return (
@@ -213,7 +209,7 @@ export default function ProductDetails({
         </div>
 
         <div
-          className="prose max-w-none"
+          className="tiptap"
           dangerouslySetInnerHTML={{ __html: product.long_description }}
         />
       </div>
@@ -223,7 +219,7 @@ export default function ProductDetails({
         <div className="bg-white p-6 rounded-lg border shadow-sm">
           <h2 className="text-xl font-semibold mb-4">Standards</h2>
           <div
-            className="prose max-w-none"
+            className="tiptap"
             dangerouslySetInnerHTML={{ __html: product.standards }}
           />
         </div>
@@ -234,8 +230,8 @@ export default function ProductDetails({
         <h2 className="text-xl font-semibold mb-4">Documentation</h2>
         <DocumentationList
           documents={documentation}
-          onDelete={handleDocDelete}
           emptyMessage="No documentation available for this product"
+          readOnly={true}
         />
       </div>
     </div>

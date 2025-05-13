@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FiTrash2, FiEye, FiX } from "react-icons/fi";
+import { FiTrash2, FiEye, FiX, FiImage } from "react-icons/fi";
 
 export interface ProductImageProps {
   file?: File;
@@ -124,8 +124,14 @@ export const ProductImagePreview = ({
   );
 };
 
-export interface ProductImageGridProps {
-  images: Array<{ file?: File; url?: string; id?: number }>;
+interface ProductImage {
+  id?: number;
+  file?: File;
+  image_url?: string;
+}
+
+interface ProductImageGridProps {
+  images: ProductImage[];
   isUploading?: boolean;
   onRemoveImage: (index: number) => void;
 }
@@ -135,33 +141,62 @@ export default function ProductImageGrid({
   isUploading = false,
   onRemoveImage,
 }: ProductImageGridProps) {
-  // Filter out invalid images (those without a file or url)
-  const validImages = images.filter((img) => img.file || img.url);
-
-  if (validImages.length === 0) {
+  if (images.length === 0) {
     return (
-      <div className="text-center py-6 bg-gray-50 border border-dashed border-gray-300 rounded-md">
-        <p className="text-gray-500">No images added yet</p>
-        <p className="text-sm text-gray-400 mt-1">
-          Drag & drop images or use the button above
+      <div className="border-2 border-dashed border-gray-300 rounded-md p-8 flex flex-col items-center justify-center bg-gray-50">
+        <FiImage className="h-10 w-10 text-gray-400 mb-2" />
+        <p className="text-gray-500 text-center">No images uploaded yet</p>
+        <p className="text-gray-400 text-sm text-center mt-1">
+          Drag and drop images above or click to browse
         </p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
-      {validImages.map((image, index) => (
-        <ProductImagePreview
-          key={image.id || index}
-          file={image.file}
-          url={image.url}
-          id={image.id}
-          isUploading={isUploading}
-          onRemove={onRemoveImage}
-          index={index}
-        />
-      ))}
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {images.map((image, index) => {
+        // Determine the image source (file or URL)
+        const imgSrc = image.file
+          ? URL.createObjectURL(image.file)
+          : image.image_url;
+
+        return (
+          <div
+            key={index}
+            className="group relative border border-gray-200 rounded-md overflow-hidden aspect-square bg-gray-50"
+          >
+            {imgSrc ? (
+              <img
+                src={imgSrc}
+                alt={`Product image ${index + 1}`}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <FiImage className="h-8 w-8 text-gray-400" />
+              </div>
+            )}
+
+            {!isUploading && (
+              <button
+                type="button"
+                onClick={() => onRemoveImage(index)}
+                className="absolute top-2 right-2 p-1.5 bg-white/80 hover:bg-white text-gray-600 hover:text-red-600 rounded-full shadow-sm transition-colors"
+                title="Remove image"
+              >
+                <FiTrash2 size={16} />
+              </button>
+            )}
+
+            {image.file && (
+              <div className="absolute bottom-0 left-0 right-0 bg-primary/80 text-white text-xs px-2 py-1">
+                New
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

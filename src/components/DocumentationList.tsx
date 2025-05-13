@@ -6,16 +6,18 @@ import type { Documentation } from "../lib/documentation-service";
 interface DocumentationItemProps {
   doc: Documentation;
   onDelete?: (id: number) => void;
+  readOnly?: boolean;
 }
 
 export const DocumentationItem: React.FC<DocumentationItemProps> = ({
   doc,
   onDelete,
+  readOnly = false,
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
-    if (!doc.id || isDeleting) return;
+    if (!doc.id || isDeleting || readOnly) return;
 
     const confirmed = window.confirm(
       `Are you sure you want to delete "${doc.name}"?`
@@ -70,7 +72,7 @@ export const DocumentationItem: React.FC<DocumentationItemProps> = ({
           </a>
         )}
 
-        {doc.file_url && (
+        {!readOnly && doc.file_url && (
           <a
             href={doc.file_url}
             download
@@ -81,7 +83,7 @@ export const DocumentationItem: React.FC<DocumentationItemProps> = ({
           </a>
         )}
 
-        {onDelete && (
+        {!readOnly && onDelete && (
           <button
             onClick={handleDelete}
             disabled={isDeleting}
@@ -104,12 +106,14 @@ interface DocumentationListProps {
   documents: Documentation[];
   onDelete?: (id: number) => void;
   emptyMessage?: string;
+  readOnly?: boolean;
 }
 
 export default function DocumentationList({
   documents,
   onDelete,
   emptyMessage = "No documentation files available",
+  readOnly = false,
 }: DocumentationListProps) {
   if (documents.length === 0) {
     return (
@@ -123,7 +127,12 @@ export default function DocumentationList({
   return (
     <div className="space-y-3">
       {documents.map((doc) => (
-        <DocumentationItem key={doc.id} doc={doc} onDelete={onDelete} />
+        <DocumentationItem
+          key={doc.id}
+          doc={doc}
+          onDelete={onDelete}
+          readOnly={readOnly}
+        />
       ))}
     </div>
   );
