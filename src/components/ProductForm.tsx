@@ -5,6 +5,8 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { useDropzone } from "react-dropzone";
+import { createProduct } from "../lib/product-service";
+import ProductImageGrid from "./ProductImageGrid";
 
 // Define schemas using Zod
 const DocumentSchema = z.object({
@@ -330,7 +332,7 @@ export default function ProductForm() {
     size: [],
     sectors: [],
     long_description: "",
-    images: [{ file: undefined }],
+    images: [],
     standards: "",
     documentation: [{ file_name: "", file: undefined }],
   });
@@ -338,6 +340,10 @@ export default function ProductForm() {
   const [validationErrors, setValidationErrors] = useState<
     Partial<Record<keyof ProductFormData, string>>
   >({});
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Available sizes
   const availableSizes = Array.from({ length: 10 }, (_, i) =>
@@ -387,13 +393,43 @@ export default function ProductForm() {
   };
 
   // Image handlers - updated to better manage multiple images
-  const handleImageDrop = useCallback((files: File[]) => {
-    const newImages = files.map((file) => ({ file }));
-    setFormData((prev) => ({
-      ...prev,
-      images: [...prev.images, ...newImages],
-    }));
-  }, []);
+  const handleImageDrop = useCallback(
+    (files: File[]) => {
+      // Check file sizes and types
+      const validFiles = files.filter((file) => {
+        // Check if the file is an image (under 50MB)
+        if (file.size > 50 * 1024 * 1024) {
+          setSubmitError(
+            `File ${file.name} is too large. Maximum size is 50MB.`
+          );
+          return false;
+        }
+
+        // Check if the file is an image type
+        if (!file.type.startsWith("image/")) {
+          setSubmitError(`File ${file.name} is not an image.`);
+          return false;
+        }
+
+        return true;
+      });
+
+      // Add valid files to the form data
+      if (validFiles.length > 0) {
+        const newImages = validFiles.map((file) => ({ file }));
+        setFormData((prev) => ({
+          ...prev,
+          images: [...prev.images, ...newImages],
+        }));
+
+        // Clear any previous error messages after successful upload
+        if (submitError && submitError.includes("file")) {
+          setSubmitError(null);
+        }
+      }
+    },
+    [submitError]
+  );
 
   const removeImage = (index: number) => {
     setFormData((prev) => ({
@@ -453,20 +489,55 @@ export default function ProductForm() {
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setSubmitSuccess(false);
+    setSubmitError(null);
 
     try {
       // Validate the form data with Zod
       const validatedData = ProductSchema.parse(formData);
-      console.log("Form data submitted:", validatedData);
 
-      // TODO: Upload files to Supabase Storage and get URLs
-      // Here you would:
-      // 1. Upload image files: formData.images.filter(img => img.file).map(img => img.file)
-      // 2. Upload documentation files: formData.documentation.filter(doc => doc.file).map(doc => doc.file)
-      // 3. Save the record with file URLs to Supabase Database
+      // Prepare product data for submission
+      const productData = {
+        heading: validatedData.heading,
+        subheading: validatedData.subheading,
+        short_description: validatedData.short_description,
+        reference: validatedData.reference,
+        technical_file_url: validatedData.technical_file_url || "",
+        size: validatedData.size.join(", "), // Convert array to comma-separated string
+        sectors: validatedData.sectors, // This is already an array and will be stored as JSON
+        long_description: validatedData.long_description,
+        standards: validatedData.standards,
+      };
 
-      setValidationErrors({});
-      // Clear form or show success message
+      // Get the image files
+      const imageFiles = formData.images
+        .map((img) => img.file)
+        .filter((file): file is File => file !== undefined);
+
+      // Save the product with images
+      const productId = await createProduct(productData, imageFiles);
+
+      if (productId) {
+        setSubmitSuccess(true);
+        // Reset form after successful submission
+        setFormData({
+          subheading: "",
+          heading: "",
+          short_description: "",
+          reference: "",
+          technical_file_url: "",
+          size: [],
+          sectors: [],
+          long_description: "",
+          images: [],
+          standards: "",
+          documentation: [{ file_name: "", file: undefined }],
+        });
+        setValidationErrors({});
+      } else {
+        setSubmitError("Failed to save product. Please try again.");
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         // Convert Zod errors to a more usable format
@@ -476,8 +547,13 @@ export default function ProductForm() {
           errors[path as keyof ProductFormData] = err.message;
         });
         setValidationErrors(errors);
+        setSubmitError("Please fix the validation errors and try again.");
+      } else {
+        console.error("Submission failed:", error);
+        setSubmitError("An unexpected error occurred. Please try again.");
       }
-      console.error("Validation failed:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -734,32 +810,12 @@ export default function ProductForm() {
             multiple={true}
           />
 
-          {/* Image Grid */}
-          {formData.images.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
-              {formData.images
-                .filter((img) => img.file)
-                .map((image, index) => (
-                  <div key={index} className="relative group">
-                    <div className="w-full aspect-square rounded-md overflow-hidden border border-input">
-                      <img
-                        src={URL.createObjectURL(image.file!)}
-                        alt={`Product image ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-80 hover:opacity-100"
-                      aria-label="Remove image"
-                    >
-                      <FiTrash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-            </div>
-          )}
+          {/* Image Grid using the new component */}
+          <ProductImageGrid
+            images={formData.images.map((img) => ({ file: img.file }))}
+            isUploading={isSubmitting}
+            onRemoveImage={removeImage}
+          />
 
           {validationErrors.images && (
             <p className="text-destructive text-sm">
@@ -815,11 +871,32 @@ export default function ProductForm() {
         </button>
         <button
           type="submit"
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          disabled={isSubmitting}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center"
         >
-          Save Product
+          {isSubmitting ? (
+            <>
+              <span className="mr-2">Saving...</span>
+              <div className="h-4 w-4 border-2 border-t-transparent border-primary-foreground rounded-full animate-spin"></div>
+            </>
+          ) : (
+            "Save Product"
+          )}
         </button>
       </div>
+
+      {/* Success/Error Messages */}
+      {submitSuccess && (
+        <div className="p-4 bg-green-50 text-green-700 border border-green-200 rounded-md">
+          Product successfully saved!
+        </div>
+      )}
+
+      {submitError && (
+        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
+          {submitError}
+        </div>
+      )}
     </form>
   );
 }
