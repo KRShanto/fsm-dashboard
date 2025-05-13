@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { z } from "zod";
-import { FiPlus, FiTrash2, FiUpload } from "react-icons/fi";
+import { FiPlus, FiTrash2, FiUpload, FiFile } from "react-icons/fi";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -10,7 +10,7 @@ import ProductImageGrid from "./ProductImageGrid";
 
 // Define schemas using Zod
 const DocumentSchema = z.object({
-  file_name: z.string(),
+  name: z.string().min(1, "File name is required"),
   file: z.any().optional(), // For the file object
 });
 
@@ -253,7 +253,7 @@ const FileDropzone = ({
 };
 
 // Documentation upload component - fixed typing
-const DocumentUploadField = ({
+const DocumentationUploadField = ({
   doc,
   onDocChange,
   onFileChange,
@@ -266,17 +266,31 @@ const DocumentUploadField = ({
   onRemove: () => void;
   showRemoveButton: boolean;
 }) => {
+  const [fileError, setFileError] = useState<string | null>(null);
+
   const handleFileDrop = useCallback(
     (files: File[]) => {
       if (files.length > 0) {
+        // Check file size - limit to 50MB
+        if (files[0].size > 50 * 1024 * 1024) {
+          setFileError(
+            `File ${files[0].name} is too large. Maximum size is 50MB.`
+          );
+          return;
+        }
         onFileChange(files[0]);
+
+        // Clear any previous error messages after successful upload
+        if (fileError) {
+          setFileError(null);
+        }
       }
     },
-    [onFileChange]
+    [onFileChange, fileError]
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 p-4 border border-gray-200 rounded-md bg-gray-50">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">
@@ -285,8 +299,8 @@ const DocumentUploadField = ({
           <div className="flex gap-2">
             <input
               type="text"
-              value={doc.file_name}
-              onChange={(e) => onDocChange("file_name", e.target.value)}
+              value={doc.name}
+              onChange={(e) => onDocChange("name", e.target.value)}
               className="flex-1 px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="File Name"
             />
@@ -312,12 +326,29 @@ const DocumentUploadField = ({
               "application/msword": [".doc"],
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
                 [".docx"],
+              "application/vnd.ms-excel": [".xls"],
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                [".xlsx"],
             }}
             label="Upload File"
             multiple={false}
           />
         </div>
       </div>
+
+      {fileError && (
+        <div className="mt-1 text-destructive text-sm">{fileError}</div>
+      )}
+
+      {/* Show file preview if available */}
+      {doc.file && (
+        <div className="mt-2 flex items-center p-2 bg-primary/5 rounded-md">
+          <FiFile className="text-primary mr-2" />
+          <span className="text-sm text-gray-700 truncate flex-1">
+            {doc.file.name} ({(doc.file.size / 1024).toFixed(1)} KB)
+          </span>
+        </div>
+      )}
     </div>
   );
 };
@@ -334,7 +365,7 @@ export default function ProductForm() {
     long_description: "",
     images: [],
     standards: "",
-    documentation: [{ file_name: "", file: undefined }],
+    documentation: [{ name: "", file: undefined }],
   });
 
   const [validationErrors, setValidationErrors] = useState<
@@ -442,10 +473,7 @@ export default function ProductForm() {
   const addDocumentationField = () => {
     setFormData({
       ...formData,
-      documentation: [
-        ...formData.documentation,
-        { file_name: "", file: undefined },
-      ],
+      documentation: [...formData.documentation, { name: "", file: undefined }],
     });
   };
 
@@ -467,7 +495,7 @@ export default function ProductForm() {
     updatedDocs[index] = {
       ...updatedDocs[index],
       file,
-      file_name: updatedDocs[index].file_name || file.name,
+      name: updatedDocs[index].name || file.name,
     };
     setFormData({
       ...formData,
@@ -482,7 +510,7 @@ export default function ProductForm() {
       ...formData,
       documentation: updatedDocs.length
         ? updatedDocs
-        : [{ file_name: "", file: undefined }],
+        : [{ name: "", file: undefined }],
     });
   };
 
@@ -515,8 +543,20 @@ export default function ProductForm() {
         .map((img) => img.file)
         .filter((file): file is File => file !== undefined);
 
-      // Save the product with images
-      const productId = await createProduct(productData, imageFiles);
+      // Get the documentation files
+      const documentationFiles = formData.documentation
+        .filter((doc) => doc.name.trim() !== "" && doc.file)
+        .map((doc) => ({
+          name: doc.name,
+          file: doc.file as File,
+        }));
+
+      // Save the product with images and documentation
+      const productId = await createProduct(
+        productData,
+        imageFiles,
+        documentationFiles
+      );
 
       if (productId) {
         setSubmitSuccess(true);
@@ -532,7 +572,7 @@ export default function ProductForm() {
           long_description: "",
           images: [],
           standards: "",
-          documentation: [{ file_name: "", file: undefined }],
+          documentation: [{ name: "", file: undefined }],
         });
         setValidationErrors({});
       } else {
@@ -840,7 +880,7 @@ export default function ProductForm() {
 
         <div className="space-y-6">
           {formData.documentation.map((doc, index) => (
-            <DocumentUploadField
+            <DocumentationUploadField
               key={index}
               doc={doc}
               onDocChange={(field, value) =>

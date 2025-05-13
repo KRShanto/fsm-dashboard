@@ -1,5 +1,6 @@
 import supabase from "../supabase-client";
 import { uploadFile, deleteFile } from "./supabase-storage";
+import { uploadDocumentation } from "./documentation-service";
 
 // Define types based on your database schema
 export interface Product {
@@ -24,11 +25,12 @@ export interface ProductImage {
 }
 
 /**
- * Create a new product with images
+ * Create a new product with images and documentation
  */
 export async function createProduct(
   product: Omit<Product, "id" | "created_at">,
-  imageFiles: File[]
+  imageFiles: File[],
+  documentations: Array<{ name: string; file: File }> = []
 ): Promise<number | null> {
   try {
     // 1. Insert the product data
@@ -81,9 +83,15 @@ export async function createProduct(
 
         if (imagesError) {
           console.error("Error saving image records:", imagesError.message);
-          // We don't return null here, as the product was created successfully
-          // In a production app, you might want to clean up the uploaded files if the DB insert fails
         }
+      }
+    }
+
+    // 3. Upload documentation files
+    if (documentations.length > 0) {
+      const docsUploaded = await uploadDocumentation(productId, documentations);
+      if (!docsUploaded) {
+        console.error("Some documentation files failed to upload");
       }
     }
 
