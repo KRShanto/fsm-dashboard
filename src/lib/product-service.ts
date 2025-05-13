@@ -244,9 +244,35 @@ export async function updateProduct(
  */
 export async function deleteProduct(id: number): Promise<boolean> {
   try {
-    // Due to cascade delete setting in the database,
-    // deleting the product will automatically delete related images
+    // 1. Get all product images before deletion
+    const { data: productImages, error: imagesError } = await supabase
+      .from("product_images")
+      .select("image_url")
+      .eq("product", id);
 
+    if (imagesError) {
+      console.error(
+        "Error fetching product images before deletion:",
+        imagesError.message
+      );
+      // Continue with deletion even if we can't get the images
+    }
+
+    // 2. Get all product documentation before deletion
+    const { data: documentation, error: docsError } = await supabase
+      .from("documentation")
+      .select("file_url")
+      .eq("product", id);
+
+    if (docsError) {
+      console.error(
+        "Error fetching documentation before deletion:",
+        docsError.message
+      );
+      // Continue with deletion even if we can't get the documentation
+    }
+
+    // 3. Delete the product (this will cascade delete related records in the database)
     const { error } = await supabase.from("products").delete().eq("id", id);
 
     if (error) {
@@ -254,8 +280,25 @@ export async function deleteProduct(id: number): Promise<boolean> {
       return false;
     }
 
-    // Note: We should clean up storage files as well, but this is omitted for brevity
-    // In a real application, you would retrieve all image URLs and delete them from storage
+    // 4. Clean up files from storage
+
+    // 4.1 Delete all product images
+    if (productImages && productImages.length > 0) {
+      for (const img of productImages) {
+        if (img.image_url) {
+          await deleteFile(img.image_url, "product-images");
+        }
+      }
+    }
+
+    // 4.2 Delete all documentation files
+    if (documentation && documentation.length > 0) {
+      for (const doc of documentation) {
+        if (doc.file_url) {
+          await deleteFile(doc.file_url, "documentation");
+        }
+      }
+    }
 
     return true;
   } catch (error) {

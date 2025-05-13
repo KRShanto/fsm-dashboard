@@ -1,21 +1,33 @@
 import { useEffect, useState } from "react";
-import { getProductById } from "../lib/product-service";
+import { getProductById, deleteProduct } from "../lib/product-service";
 import { getDocumentationByProductId } from "../lib/documentation-service";
 import type { Product } from "../lib/product-service";
 import type { Documentation } from "../lib/documentation-service";
 import DocumentationList from "./DocumentationList";
-import { FiArrowLeft, FiEdit } from "react-icons/fi";
+import { FiArrowLeft, FiEdit, FiTrash2 } from "react-icons/fi";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 
 interface ProductDetailsProps {
   productId: number;
   onBack: () => void;
   onEdit?: (id: number) => void;
+  onDelete?: (id: number) => void;
 }
 
 export default function ProductDetails({
   productId,
   onBack,
   onEdit,
+  onDelete,
 }: ProductDetailsProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [images, setImages] = useState<{ image_url: string }[]>([]);
@@ -23,6 +35,8 @@ export default function ProductDetails({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const loadProductData = async () => {
     try {
@@ -58,6 +72,31 @@ export default function ProductDetails({
     loadProductData();
   }, [productId]);
 
+  const handleDeleteProduct = async () => {
+    if (!product || isDeleting) return;
+
+    setIsDeleting(true);
+    try {
+      const success = await deleteProduct(productId);
+      if (success) {
+        if (onDelete) {
+          onDelete(productId);
+        } else {
+          onBack(); // Fallback to going back if no onDelete handler
+        }
+      } else {
+        alert("Failed to delete the product. Please try again.");
+        setIsDeleting(false);
+        setDeleteDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      alert("An error occurred while deleting the product.");
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -91,6 +130,29 @@ export default function ProductDetails({
 
   return (
     <div className="space-y-8">
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Product</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{product.heading}"? This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProduct}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <button
@@ -100,14 +162,25 @@ export default function ProductDetails({
           <FiArrowLeft className="mr-2" /> Back to Products
         </button>
 
-        {onEdit && (
+        <div className="flex space-x-3">
+          {onEdit && (
+            <button
+              onClick={() => onEdit(productId)}
+              className="flex items-center px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+            >
+              <FiEdit className="mr-2" /> Edit Product
+            </button>
+          )}
+
           <button
-            onClick={() => onEdit(productId)}
-            className="flex items-center px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+            onClick={() => setDeleteDialogOpen(true)}
+            disabled={isDeleting}
+            className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
           >
-            <FiEdit className="mr-2" /> Edit Product
+            <FiTrash2 className="mr-2" />{" "}
+            {isDeleting ? "Deleting..." : "Delete Product"}
           </button>
-        )}
+        </div>
       </div>
 
       {/* Product Information */}
