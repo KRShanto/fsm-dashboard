@@ -237,6 +237,13 @@ export default function ProductDetails({
             <p className="text-gray-700">{product.reference}</p>
           </div>
 
+          {product.brand && (
+            <div>
+              <h3 className="font-medium mb-1">Brand</h3>
+              <p className="text-gray-700">{product.brand}</p>
+            </div>
+          )}
+
           {product.technical_file_url && (
             <div>
               <h3 className="font-medium mb-1">Technical File</h3>

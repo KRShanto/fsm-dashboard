@@ -15,6 +15,7 @@ export interface Product {
   sectors: string[];
   long_description: string;
   standards?: string;
+  brand?: string;
 }
 
 export interface ProductImage {
@@ -46,6 +47,7 @@ export async function createProduct(
         sectors: product.sectors,
         long_description: product.long_description,
         standards: product.standards,
+        brand: product.brand,
       })
       .select("id")
       .single();

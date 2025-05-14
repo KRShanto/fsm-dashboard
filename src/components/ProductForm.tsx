@@ -30,6 +30,7 @@ const ProductSchema = z.object({
   ),
   standards: z.string(),
   documentation: z.array(DocumentSchema),
+  brand: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof ProductSchema>;
@@ -366,6 +367,7 @@ export default function ProductForm() {
     images: [],
     standards: "",
     documentation: [{ name: "", file: undefined }],
+    brand: "",
   });
 
   const [validationErrors, setValidationErrors] = useState<
@@ -536,6 +538,7 @@ export default function ProductForm() {
         sectors: validatedData.sectors, // This is already an array and will be stored as JSON
         long_description: validatedData.long_description,
         standards: validatedData.standards,
+        brand: validatedData.brand,
       };
 
       // Get the image files
@@ -573,6 +576,7 @@ export default function ProductForm() {
           images: [],
           standards: "",
           documentation: [{ name: "", file: undefined }],
+          brand: "",
         });
         setValidationErrors({});
       } else {
@@ -671,6 +675,29 @@ export default function ProductForm() {
             {validationErrors.reference && (
               <p className="text-destructive text-sm">
                 {validationErrors.reference}
+              </p>
+            )}
+          </div>
+
+          {/* Brand */}
+          <div className="space-y-2">
+            <label
+              htmlFor="brand"
+              className="text-sm font-medium text-foreground"
+            >
+              Brand
+            </label>
+            <input
+              type="text"
+              id="brand"
+              name="brand"
+              value={formData.brand}
+              onChange={handleTextChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {validationErrors.brand && (
+              <p className="text-destructive text-sm">
+                {validationErrors.brand}
               </p>
             )}
           </div>
