@@ -1,54 +1,64 @@
-# React + TypeScript + Vite
+# FSM Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A product management dashboard developed for a Fire and Safety Management company.
 
-Currently, two official plugins are available:
+## Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This application provides a comprehensive solution for managing fire and safety product information, including:
 
-## Expanding the ESLint configuration
+- Product catalog management
+- Detailed product specifications
+- Documentation management
+- Image galleries
+- Product categorization by sectors
+- Technical standards compliance tracking
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Features
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+- **Product Management**: Add, edit, and delete products with detailed information
+- **Rich Text Editing**: Format product descriptions and standards information
+- **Image Management**: Upload and manage multiple product images
+- **Documentation**: Attach and manage technical documentation
+- **Responsive Design**: Works across desktop and mobile devices
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Technology Stack
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- React + TypeScript
+- Vite for build tooling
+- Supabase for backend and storage
+- TipTap for rich text editing
+- Tailwind CSS for styling
+- React Dropzone for file uploads
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v16+)
+- npm or yarn
+- Supabase account and project
+
+### Installation
+
+1. Clone the repository
+2. Install dependencies:
+   ```
+   npm install
+   ```
+3. Create a `.env` file with your Supabase credentials:
+   ```
+   VITE_SUPABASE_URL=your-supabase-url
+   VITE_SUPABASE_KEY=your-supabase-key
+   ```
+4. Start the development server:
+   ```
+   npm run dev
+   ```
+
+## License
+
+This project is proprietary and confidential. See the [LICENSE](LICENSE) file for details.
+
+## Copyright
+
+Copyright (c) 2025 KR Shanto. All rights reserved.
