@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { getProductById, deleteProduct } from "../lib/product-service";
 import { getDocumentationByProductId } from "../lib/documentation-service";
-import type { Product } from "../lib/product-service";
+import type { Product, StandardImage } from "../lib/product-service";
 import type { Documentation } from "../lib/documentation-service";
 import DocumentationList from "./DocumentationList";
 import { FiArrowLeft, FiEdit, FiTrash2 } from "react-icons/fi";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +32,7 @@ export default function ProductDetails({
 }: ProductDetailsProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [images, setImages] = useState<{ image_url: string }[]>([]);
+  const [standardImages, setStandardImages] = useState<StandardImage[]>([]);
   const [documentation, setDocumentation] = useState<Documentation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,11 @@ export default function ProductDetails({
         setImages(productData.images);
       }
 
+      // Get standard images
+      if (productData.standard_images) {
+        setStandardImages(productData.standard_images);
+      }
+
       // Load documentation
       const docsData = await getDocumentationByProductId(productId);
       setDocumentation(docsData);
@@ -79,19 +86,20 @@ export default function ProductDetails({
     try {
       const success = await deleteProduct(productId);
       if (success) {
+        toast.success("Product deleted successfully");
         if (onDelete) {
           onDelete(productId);
         } else {
           onBack(); // Fallback to going back if no onDelete handler
         }
       } else {
-        alert("Failed to delete the product. Please try again.");
+        toast.error("Failed to delete the product. Please try again.");
         setIsDeleting(false);
         setDeleteDialogOpen(false);
       }
     } catch (error) {
       console.error("Error deleting product:", error);
-      alert("An error occurred while deleting the product.");
+      toast.error("An error occurred while deleting the product.");
       setIsDeleting(false);
       setDeleteDialogOpen(false);
     }
@@ -294,14 +302,45 @@ export default function ProductDetails({
         />
       </div>
 
-      {/* Standards */}
-      {product.standards && (
+      {/* Standards with Images */}
+      {(product.standards || standardImages.length > 0) && (
         <div className="bg-white p-6 rounded-lg border shadow-sm">
           <h2 className="text-xl font-semibold mb-4">Standards</h2>
-          <div
-            className="tiptap"
-            dangerouslySetInnerHTML={{ __html: product.standards }}
-          />
+
+          {product.standards && (
+            <div
+              className="tiptap mb-6"
+              dangerouslySetInnerHTML={{ __html: product.standards }}
+            />
+          )}
+
+          {/* Standard Images - Grid Layout */}
+          {standardImages.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-lg font-medium mb-3">Standard Images</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {standardImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200"
+                  >
+                    <a
+                      href={img.image_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full h-full"
+                    >
+                      <img
+                        src={img.image_url}
+                        alt={`Standard ${idx + 1}`}
+                        className="w-full h-full object-contain"
+                      />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

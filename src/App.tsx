@@ -11,6 +11,7 @@ import ProductDetailPage from "./pages/ProductDetailPage";
 import NewProductPage from "./pages/NewProductPage";
 import EditProductPage from "./pages/EditProductPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import { Toaster } from "./components/ui/sonner";
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -72,6 +73,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Toaster />
       <Routes>
         <Route path="/" element={<DashboardLayout />}>
           <Route index element={<HomePage />} />

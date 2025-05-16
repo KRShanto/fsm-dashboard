@@ -7,6 +7,7 @@ import Underline from "@tiptap/extension-underline";
 import { useDropzone } from "react-dropzone";
 import { createProduct } from "../lib/product-service";
 import ProductImageGrid from "./ProductImageGrid";
+import { toast } from "sonner";
 
 // Define schemas using Zod
 const DocumentSchema = z.object({
@@ -29,7 +30,12 @@ const ProductSchema = z.object({
     })
   ),
   standards: z.string(),
-  documentation: z.array(DocumentSchema),
+  standards_images: z.array(
+    z.object({
+      file: z.any().optional(),
+    })
+  ),
+  documentation: z.array(DocumentSchema).default([]),
   brand: z.string().optional(),
 });
 
@@ -366,6 +372,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
     long_description: "",
     images: [],
     standards: "",
+    standards_images: [],
     documentation: [{ name: "", file: undefined }],
     brand: "",
   });
@@ -375,8 +382,6 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
   >({});
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Available sizes
   const availableSizes = Array.from({ length: 10 }, (_, i) =>
@@ -427,20 +432,24 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
 
   // Image handlers - updated to better manage multiple images
   const handleImageDrop = useCallback(
-    (files: File[]) => {
+    (files: File[], imageType: "images" | "standards_images") => {
       // Check file sizes and types
       const validFiles = files.filter((file) => {
         // Check if the file is an image (under 50MB)
         if (file.size > 50 * 1024 * 1024) {
-          setSubmitError(
-            `File ${file.name} is too large. Maximum size is 50MB.`
-          );
+          setValidationErrors({
+            ...validationErrors,
+            [imageType]: `File ${file.name} is too large. Maximum size is 50MB.`,
+          });
           return false;
         }
 
         // Check if the file is an image type
         if (!file.type.startsWith("image/")) {
-          setSubmitError(`File ${file.name} is not an image.`);
+          setValidationErrors({
+            ...validationErrors,
+            [imageType]: `File ${file.name} is not an image.`,
+          });
           return false;
         }
 
@@ -452,22 +461,31 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
         const newImages = validFiles.map((file) => ({ file }));
         setFormData((prev) => ({
           ...prev,
-          images: [...prev.images, ...newImages],
+          [imageType]: [...prev[imageType], ...newImages],
         }));
 
         // Clear any previous error messages after successful upload
-        if (submitError && submitError.includes("file")) {
-          setSubmitError(null);
+        if (
+          validationErrors[imageType] &&
+          validationErrors[imageType].includes("file")
+        ) {
+          setValidationErrors({
+            ...validationErrors,
+            [imageType]: null,
+          });
         }
       }
     },
-    [submitError]
+    [validationErrors]
   );
 
-  const removeImage = (index: number) => {
+  const removeImage = (
+    index: number,
+    imageType: "images" | "standards_images"
+  ) => {
     setFormData((prev) => ({
       ...prev,
-      images: prev.images.filter((_, i) => i !== index),
+      [imageType]: prev[imageType].filter((_, i) => i !== index),
     }));
   };
 
@@ -520,12 +538,19 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setSubmitSuccess(false);
-    setSubmitError(null);
+    setValidationErrors({});
 
     try {
-      // Validate the form data with Zod
-      const validatedData = ProductSchema.parse(formData);
+      // Filter out empty documentation entries
+      const validDocumentation = formData.documentation.filter(
+        (doc) => doc.name.trim() !== "" && doc.file
+      );
+
+      // Validate the form data with Zod (documentation is optional)
+      const validatedData = ProductSchema.parse({
+        ...formData,
+        documentation: validDocumentation.length > 0 ? validDocumentation : [],
+      });
 
       // Prepare product data for submission
       const productData = {
@@ -546,19 +571,27 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
         .map((img) => img.file)
         .filter((file): file is File => file !== undefined);
 
+      // Get the standards image files
+      const standardsImageFiles = formData.standards_images
+        .map((img) => img.file)
+        .filter((file): file is File => file !== undefined);
+
       // Get the documentation files
-      const documentationFiles = formData.documentation
-        .filter((doc) => doc.name.trim() !== "" && doc.file)
-        .map((doc) => ({
-          name: doc.name,
-          file: doc.file as File,
-        }));
+      const documentationFiles = validDocumentation.map((doc) => ({
+        name: doc.name,
+        file: doc.file as File,
+      }));
 
       // Save the product with images and documentation
-      await createProduct(productData, imageFiles, documentationFiles);
+      await createProduct(
+        productData,
+        imageFiles,
+        documentationFiles,
+        standardsImageFiles
+      );
 
-      setSubmitSuccess(true);
-      setIsSubmitting(false);
+      // Show success toast
+      toast.success("Product successfully saved!");
 
       // Call onSuccess callback if provided
       if (onSuccess) {
@@ -577,6 +610,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
         long_description: "",
         images: [],
         standards: "",
+        standards_images: [],
         documentation: [{ name: "", file: undefined }],
         brand: "",
       });
@@ -590,10 +624,10 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
           errors[path as keyof ProductFormData] = err.message;
         });
         setValidationErrors(errors);
-        setSubmitError("Please fix the validation errors and try again.");
+        toast.error("Please fix the validation errors and try again.");
       } else {
         console.error("Submission failed:", error);
-        setSubmitError("An unexpected error occurred. Please try again.");
+        toast.error("An unexpected error occurred. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -855,6 +889,60 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
               </p>
             )}
           </div>
+
+          {/* Standards Images Section */}
+          <div className="space-y-4 mt-6">
+            <label className="text-sm font-medium text-foreground">
+              Standards Images
+            </label>
+
+            {/* Dropzone for Standards Images */}
+            <FileDropzone
+              file={undefined}
+              onFileDrop={(files) => handleImageDrop(files, "standards_images")}
+              acceptedFileTypes={{
+                "image/*": [".jpeg", ".jpg", ".png", ".gif"],
+              }}
+              label="Drop standards images here or click to browse"
+              multiple={true}
+            />
+
+            {/* Standards Images Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {formData.standards_images.map((img, idx) => (
+                <div
+                  key={idx}
+                  className="relative group aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200"
+                >
+                  {img.file ? (
+                    <img
+                      src={URL.createObjectURL(img.file)}
+                      alt={`Standard ${idx + 1}`}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <span className="text-gray-400">No preview</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeImage(idx, "standards_images")}
+                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label="Remove image"
+                  >
+                    <FiTrash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {validationErrors.standards_images && (
+              <p className="text-destructive text-sm">
+                {validationErrors.standards_images}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -868,7 +956,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
           {/* Single Dropzone */}
           <FileDropzone
             file={undefined}
-            onFileDrop={handleImageDrop}
+            onFileDrop={(files) => handleImageDrop(files, "images")}
             acceptedFileTypes={{
               "image/*": [".jpeg", ".jpg", ".png", ".gif"],
             }}
@@ -880,7 +968,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
           <ProductImageGrid
             images={formData.images.map((img) => ({ file: img.file }))}
             isUploading={isSubmitting}
-            onRemoveImage={removeImage}
+            onRemoveImage={(index) => removeImage(index, "images")}
           />
 
           {validationErrors.images && (
@@ -894,7 +982,9 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
       {/* Documentation Section */}
       <div className="bg-card rounded-lg p-6 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-foreground">Documentation</h3>
+          <h3 className="text-lg font-medium text-foreground">
+            Documentation (Optional)
+          </h3>
           <button
             type="button"
             onClick={addDocumentationField}
@@ -950,19 +1040,6 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
           )}
         </button>
       </div>
-
-      {/* Success/Error Messages */}
-      {submitSuccess && (
-        <div className="p-4 bg-green-50 text-green-700 border border-green-200 rounded-md">
-          Product successfully saved!
-        </div>
-      )}
-
-      {submitError && (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
-          {submitError}
-        </div>
-      )}
     </form>
   );
 }

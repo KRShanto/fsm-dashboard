@@ -18,7 +18,7 @@ import {
   uploadDocumentation,
 } from "../lib/documentation-service";
 import ProductImageGrid from "./ProductImageGrid";
-import type { Documentation } from "../lib/documentation-service";
+import { toast } from "sonner";
 
 // Schema definitions - reused from ProductForm
 const DocumentSchema = z.object({
@@ -26,6 +26,7 @@ const DocumentSchema = z.object({
   name: z.string().min(1, "File name is required"),
   file: z.any().optional(),
   file_url: z.string().optional(),
+  toDelete: z.boolean().optional(),
 });
 
 const ProductSchema = z.object({
@@ -46,6 +47,14 @@ const ProductSchema = z.object({
     })
   ),
   standards: z.string(),
+  standards_images: z.array(
+    z.object({
+      id: z.number().optional(),
+      image_url: z.string().optional(),
+      file: z.any().optional(),
+      toDelete: z.boolean().optional(),
+    })
+  ),
   documentation: z.array(DocumentSchema),
   brand: z.string().optional(),
 });
@@ -402,59 +411,79 @@ export default function EditProductForm({
   onBack,
   onSuccess,
 }: EditProductFormProps) {
-  const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState<ProductFormData | null>(null);
-  const [originalDocs, setOriginalDocs] = useState<Documentation[]>([]);
+  const [formData, setFormData] = useState<ProductFormData>({
+    subheading: "",
+    heading: "",
+    short_description: "",
+    reference: "",
+    technical_file_url: "",
+    size: [],
+    sectors: [],
+    long_description: "",
+    images: [],
+    standards: "",
+    standards_images: [],
+    documentation: [],
+    brand: "",
+  });
+
   const [validationErrors, setValidationErrors] = useState<
     Partial<Record<keyof ProductFormData, string>>
   >({});
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [imagesToDelete, setImagesToDelete] = useState<number[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Available sizes
   const availableSizes = Array.from({ length: 10 }, (_, i) =>
     (i + 1).toString()
   );
 
-  // Load product data when component mounts
+  // Load product data on mount
   useEffect(() => {
     async function loadProductData() {
       try {
-        setLoading(true);
-        const productData = await getProductById(productId);
-        const docsData = await getDocumentationByProductId(productId);
+        setIsLoading(true);
 
+        // Get product details
+        const productData = await getProductById(productId);
         if (!productData) {
-          setSubmitError("Product not found");
-          setLoading(false);
+          toast.error("Product not found");
+          setIsLoading(false);
           return;
         }
 
-        setOriginalDocs(docsData);
+        // Get documentation
+        const docsData = await getDocumentationByProductId(productId);
 
-        // Initialize form data from the product
+        // Format sizes
         const sizeArray = productData.size
-          ? productData.size.split(",").map((s) => s.trim())
-          : [];
+          .split(",")
+          .map((size) => size.trim())
+          .filter((size) => size.length > 0);
 
-        const sectorsArray =
+        // Parse sectors if it's a string
+        const parsedSectors =
           typeof productData.sectors === "string"
             ? JSON.parse(productData.sectors)
-            : productData.sectors || [];
+            : productData.sectors;
 
+        // Initialize form data with the existing product details
         setFormData({
-          heading: productData.heading,
-          subheading: productData.subheading,
-          short_description: productData.short_description,
-          reference: productData.reference,
+          subheading: productData.subheading || "",
+          heading: productData.heading || "",
+          short_description: productData.short_description || "",
+          reference: productData.reference || "",
           technical_file_url: productData.technical_file_url || "",
           size: sizeArray,
-          sectors: sectorsArray,
-          long_description: productData.long_description,
-          standards: productData.standards || "",
+          sectors: parsedSectors,
+          long_description: productData.long_description || "",
           images: productData.images.map((img) => ({
+            id: img.id,
+            image_url: img.image_url,
+            toDelete: false,
+          })),
+          standards_images: productData.standard_images.map((img) => ({
             id: img.id,
             image_url: img.image_url,
             toDelete: false,
@@ -463,15 +492,17 @@ export default function EditProductForm({
             id: doc.id,
             name: doc.name,
             file_url: doc.file_url,
+            toDelete: false,
           })),
+          standards: productData.standards || "",
           brand: productData.brand || "",
         });
 
-        setLoading(false);
+        setIsLoading(false);
       } catch (error) {
-        console.error("Error loading product data:", error);
-        setSubmitError("Failed to load product data");
-        setLoading(false);
+        console.error("Error loading product:", error);
+        toast.error("Failed to load product data");
+        setIsLoading(false);
       }
     }
 
@@ -530,22 +561,24 @@ export default function EditProductForm({
 
   // Image handlers
   const handleImageDrop = useCallback(
-    (files: File[]) => {
-      if (!formData) return;
-
+    (files: File[], imageType: "images" | "standards_images") => {
       // Check file sizes and types
       const validFiles = files.filter((file) => {
         // Check if the file is an image (under 50MB)
         if (file.size > 50 * 1024 * 1024) {
-          setSubmitError(
-            `File ${file.name} is too large. Maximum size is 50MB.`
-          );
+          setValidationErrors({
+            ...validationErrors,
+            [imageType]: `File ${file.name} is too large. Maximum size is 50MB.`,
+          });
           return false;
         }
 
         // Check if the file is an image type
         if (!file.type.startsWith("image/")) {
-          setSubmitError(`File ${file.name} is not an image.`);
+          setValidationErrors({
+            ...validationErrors,
+            [imageType]: `File ${file.name} is not an image.`,
+          });
           return false;
         }
 
@@ -555,37 +588,43 @@ export default function EditProductForm({
       // Add valid files to the form data
       if (validFiles.length > 0) {
         const newImages = validFiles.map((file) => ({ file }));
-        setFormData((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            images: [...prev.images, ...newImages],
-          };
-        });
+        setFormData((prev) => ({
+          ...prev,
+          [imageType]: [...prev[imageType], ...newImages],
+        }));
 
         // Clear any previous error messages after successful upload
-        if (submitError && submitError.includes("file")) {
-          setSubmitError(null);
+        if (validationErrors[imageType]) {
+          setValidationErrors({
+            ...validationErrors,
+            [imageType]: null,
+          });
         }
       }
     },
-    [formData, submitError]
+    [validationErrors]
   );
 
-  const removeImage = (index: number) => {
-    if (!formData) return;
-
-    const imageToRemove = formData.images[index];
-
-    // If this image has an ID (exists in database), mark it for deletion
-    if (imageToRemove.id) {
-      setImagesToDelete((prev) => [...prev, imageToRemove.id as number]);
-    }
-
-    // Remove from current UI
-    setFormData({
-      ...formData,
-      images: formData.images.filter((_, i) => i !== index),
+  const removeImage = (
+    index: number,
+    imageType: "images" | "standards_images"
+  ) => {
+    setFormData((prev) => {
+      const updatedImages = [...prev[imageType]];
+      // If it's an existing image with an ID, mark it for deletion
+      // otherwise remove it completely from the array
+      if (updatedImages[index].id) {
+        updatedImages[index] = {
+          ...updatedImages[index],
+          toDelete: true,
+        };
+      } else {
+        updatedImages.splice(index, 1);
+      }
+      return {
+        ...prev,
+        [imageType]: updatedImages,
+      };
     });
   };
 
@@ -653,11 +692,8 @@ export default function EditProductForm({
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData) return;
-
     setIsSubmitting(true);
-    setSubmitSuccess(false);
-    setSubmitError(null);
+    setValidationErrors({});
 
     try {
       // Validate the form data with Zod
@@ -674,59 +710,82 @@ export default function EditProductForm({
         sectors: validatedData.sectors, // This is already an array and will be stored as JSON
         long_description: validatedData.long_description,
         standards: validatedData.standards,
-        brand: validatedData.brand || "",
+        brand: validatedData.brand,
       };
 
-      // Get new image files to add
+      // Get new image files (those without IDs)
       const newImageFiles = formData.images
-        .filter((img) => img.file)
+        .filter((img) => img.file && !img.id)
         .map((img) => img.file)
         .filter((file): file is File => file !== undefined);
+
+      // Get IDs of images to delete
+      const deleteImageIds = formData.images
+        .filter((img) => img.id && img.toDelete)
+        .map((img) => img.id as number);
+
+      // Get new standard image files (those without IDs)
+      const newStandardImageFiles = formData.standards_images
+        .filter((img) => img.file && !img.id)
+        .map((img) => img.file)
+        .filter((file): file is File => file !== undefined);
+
+      // Get IDs of standard images to delete
+      const deleteStandardImageIds = formData.standards_images
+        .filter((img) => img.id && img.toDelete)
+        .map((img) => img.id as number);
+
+      // Handle documentation changes
+      const docsToDelete = formData.documentation
+        .filter((doc) => doc.id && doc.toDelete)
+        .map((doc) => doc.id as number);
+
+      // Delete marked documentation
+      if (docsToDelete.length > 0) {
+        for (const docId of docsToDelete) {
+          await deleteDocumentation(docId);
+        }
+      }
+
+      // Prepare new documentation files
+      const newDocs = formData.documentation.filter(
+        (doc) => !doc.id && doc.file && doc.name.trim() !== ""
+      );
 
       // Update the product with new data and images
       const success = await updateProduct(
         productId,
         productData,
         newImageFiles,
-        imagesToDelete
+        deleteImageIds,
+        newStandardImageFiles,
+        deleteStandardImageIds
       );
 
-      // Handle documents that need to be deleted
-      const docsToDelete = originalDocs
-        .filter(
-          (originalDoc) =>
-            !formData.documentation.some(
-              (currentDoc) => currentDoc.id === originalDoc.id
-            )
-        )
-        .map((doc) => doc.id as number);
-
-      // Delete documents that were removed
-      for (const docId of docsToDelete) {
-        await deleteDocumentation(docId);
-      }
-
-      // Handle new documentation files
-      const newDocs = formData.documentation
-        .filter((doc) => !doc.id && doc.name.trim() !== "" && doc.file)
-        .map((doc) => ({
-          name: doc.name,
-          file: doc.file as File,
-        }));
-
-      if (newDocs.length > 0) {
-        await uploadDocumentation(productId, newDocs);
-      }
-
       if (success) {
-        setSubmitSuccess(true);
+        // Upload any new documentation
+        if (newDocs.length > 0) {
+          const docFiles = newDocs.map((doc) => ({
+            name: doc.name,
+            file: doc.file as File,
+          }));
+
+          try {
+            await uploadDocumentation(productId, docFiles);
+          } catch (error) {
+            console.error("Error uploading documentation:", error);
+            toast.error("Some documentation files could not be uploaded");
+          }
+        }
+
+        toast.success("Product successfully updated!");
+
+        // Call onSuccess callback if provided
         if (onSuccess) {
-          setTimeout(() => {
-            onSuccess();
-          }, 1500);
+          onSuccess();
         }
       } else {
-        setSubmitError("Failed to update product. Please try again.");
+        toast.error("Failed to update product. Please try again.");
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -737,17 +796,17 @@ export default function EditProductForm({
           errors[path as keyof ProductFormData] = err.message;
         });
         setValidationErrors(errors);
-        setSubmitError("Please fix the validation errors and try again.");
+        toast.error("Please fix the validation errors and try again.");
       } else {
         console.error("Submission failed:", error);
-        setSubmitError("An unexpected error occurred. Please try again.");
+        toast.error("An unexpected error occurred. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (loading || !formData) {
+  if (isLoading || !formData) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="text-center">
@@ -1023,6 +1082,70 @@ export default function EditProductForm({
                 </p>
               )}
             </div>
+
+            {/* Standards Images Section */}
+            <div className="space-y-4 mt-6">
+              <label className="text-sm font-medium text-foreground">
+                Standards Images
+              </label>
+
+              {/* Dropzone for Standards Images */}
+              <FileDropzone
+                file={undefined}
+                onFileDrop={(files) =>
+                  handleImageDrop(files, "standards_images")
+                }
+                acceptedFileTypes={{
+                  "image/*": [".jpeg", ".jpg", ".png", ".gif"],
+                }}
+                label="Drop standards images here or click to browse"
+                multiple={true}
+              />
+
+              {/* Standards Images Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {formData.standards_images
+                  .filter((img) => !img.toDelete)
+                  .map((img, idx) => (
+                    <div
+                      key={idx}
+                      className="relative group aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200"
+                    >
+                      {img.file ? (
+                        <img
+                          src={URL.createObjectURL(img.file)}
+                          alt={`Standard ${idx + 1}`}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : img.image_url ? (
+                        <img
+                          src={img.image_url}
+                          alt={`Standard ${idx + 1}`}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <span className="text-gray-400">No preview</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImage(idx, "standards_images")}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Remove image"
+                      >
+                        <FiTrash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+
+              {validationErrors.standards_images && (
+                <p className="text-destructive text-sm">
+                  {validationErrors.standards_images}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1033,26 +1156,28 @@ export default function EditProductForm({
           </h3>
 
           <div className="space-y-4">
-            {/* Single Dropzone for new images */}
+            {/* Single Dropzone */}
             <FileDropzone
               file={undefined}
-              onFileDrop={handleImageDrop}
+              onFileDrop={(files) => handleImageDrop(files, "images")}
               acceptedFileTypes={{
                 "image/*": [".jpeg", ".jpg", ".png", ".gif"],
               }}
-              label="Drop new images here or click to browse"
+              label="Drop images here or click to browse"
               multiple={true}
             />
 
-            {/* Image Grid - display both existing and new images */}
+            {/* Image Grid */}
             <ProductImageGrid
-              images={formData.images.map((img) => ({
-                id: img.id,
-                file: img.file,
-                image_url: img.image_url,
-              }))}
+              images={formData.images
+                .filter((img) => !img.toDelete)
+                .map((img) => ({
+                  id: img.id,
+                  file: img.file,
+                  image_url: img.image_url,
+                }))}
               isUploading={isSubmitting}
-              onRemoveImage={removeImage}
+              onRemoveImage={(index) => removeImage(index, "images")}
             />
 
             {validationErrors.images && (
@@ -1125,19 +1250,6 @@ export default function EditProductForm({
             )}
           </button>
         </div>
-
-        {/* Success/Error Messages */}
-        {submitSuccess && (
-          <div className="p-4 bg-green-50 text-green-700 border border-green-200 rounded-md">
-            Product successfully updated!
-          </div>
-        )}
-
-        {submitError && (
-          <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-md">
-            {submitError}
-          </div>
-        )}
       </form>
     </div>
   );

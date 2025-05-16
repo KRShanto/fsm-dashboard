@@ -25,13 +25,21 @@ export interface ProductImage {
   product: number;
 }
 
+export interface StandardImage {
+  id?: number;
+  created_at?: string;
+  image_url: string;
+  product: number;
+}
+
 /**
  * Create a new product with images and documentation
  */
 export async function createProduct(
   product: Omit<Product, "id" | "created_at">,
   imageFiles: File[],
-  documentations: Array<{ name: string; file: File }> = []
+  documentations: Array<{ name: string; file: File }> = [],
+  standardsImageFiles: File[] = []
 ): Promise<number | null> {
   try {
     // 1. Insert the product data
@@ -89,7 +97,41 @@ export async function createProduct(
       }
     }
 
-    // 3. Upload documentation files
+    // 3. Upload standards images to storage and create standard_images records
+    if (standardsImageFiles.length > 0) {
+      // Upload each file to Supabase storage
+      const standardsImageUploadPromises = standardsImageFiles.map((file) =>
+        uploadFile(file, "standard-images")
+      );
+
+      const standardsImageUrls = await Promise.all(
+        standardsImageUploadPromises
+      );
+      const validStandardsImageUrls = standardsImageUrls.filter(
+        (url): url is string => url !== null
+      );
+
+      if (validStandardsImageUrls.length > 0) {
+        // Create standard_images records in the database
+        const standardsImageRecords = validStandardsImageUrls.map((url) => ({
+          image_url: url,
+          product: productId,
+        }));
+
+        const { error: standardsImagesError } = await supabase
+          .from("standard_images")
+          .insert(standardsImageRecords);
+
+        if (standardsImagesError) {
+          console.error(
+            "Error saving standards image records:",
+            standardsImagesError.message
+          );
+        }
+      }
+    }
+
+    // 4. Upload documentation files
     if (documentations.length > 0) {
       const docsUploaded = await uploadDocumentation(productId, documentations);
       if (!docsUploaded) {
@@ -109,7 +151,10 @@ export async function createProduct(
  */
 export async function getProductById(
   id: number
-): Promise<(Product & { images: ProductImage[] }) | null> {
+): Promise<
+  | (Product & { images: ProductImage[]; standard_images: StandardImage[] })
+  | null
+> {
   try {
     // Get the product
     const { data: product, error: productError } = await supabase
@@ -131,10 +176,28 @@ export async function getProductById(
 
     if (imagesError) {
       console.error("Error fetching product images:", imagesError.message);
-      return { ...product, images: [] };
+      return { ...product, images: [], standard_images: [] };
     }
 
-    return { ...product, images: images || [] };
+    // Get the standard images using the foreign key relationship
+    const { data: standardImages, error: standardImagesError } = await supabase
+      .from("standard_images")
+      .select("*")
+      .eq("product", id);
+
+    if (standardImagesError) {
+      console.error(
+        "Error fetching standard images:",
+        standardImagesError.message
+      );
+      return { ...product, images: images || [], standard_images: [] };
+    }
+
+    return {
+      ...product,
+      images: images || [],
+      standard_images: standardImages || [],
+    };
   } catch (error) {
     console.error("Error in getProductById:", error);
     return null;
@@ -189,7 +252,9 @@ export async function updateProduct(
   id: number,
   product: Partial<Omit<Product, "id" | "created_at">>,
   newImageFiles?: File[],
-  deleteImageIds?: number[]
+  deleteImageIds?: number[],
+  newStandardImageFiles?: File[],
+  deleteStandardImageIds?: number[]
 ): Promise<boolean> {
   try {
     // 1. Update the product data
@@ -229,9 +294,43 @@ export async function updateProduct(
       }
     }
 
-    // 3. Handle new image uploads if needed
+    // 3. Handle standard image deletions if needed
+    if (deleteStandardImageIds && deleteStandardImageIds.length > 0) {
+      // Get the image URLs before deletion (for storage cleanup)
+      const { data: standardImagesToDelete } = await supabase
+        .from("standard_images")
+        .select("id, image_url")
+        .in("id", deleteStandardImageIds);
+
+      // Delete the image records
+      const { error: deleteStandardError } = await supabase
+        .from("standard_images")
+        .delete()
+        .in("id", deleteStandardImageIds);
+
+      if (deleteStandardError) {
+        console.error(
+          "Error deleting standard images:",
+          deleteStandardError.message
+        );
+      } else if (standardImagesToDelete) {
+        // Delete the files from storage
+        standardImagesToDelete.forEach((img) => {
+          if (img.image_url) {
+            deleteFile(img.image_url, "standard-images");
+          }
+        });
+      }
+    }
+
+    // 4. Handle new image uploads if needed
     if (newImageFiles && newImageFiles.length > 0) {
       await addProductImages(id, newImageFiles);
+    }
+
+    // 5. Handle new standard image uploads if needed
+    if (newStandardImageFiles && newStandardImageFiles.length > 0) {
+      await addStandardImages(id, newStandardImageFiles);
     }
 
     return true;
@@ -260,7 +359,21 @@ export async function deleteProduct(id: number): Promise<boolean> {
       // Continue with deletion even if we can't get the images
     }
 
-    // 2. Get all product documentation before deletion
+    // 2. Get all standard images before deletion
+    const { data: standardImages, error: standardImagesError } = await supabase
+      .from("standard_images")
+      .select("image_url")
+      .eq("product", id);
+
+    if (standardImagesError) {
+      console.error(
+        "Error fetching standard images before deletion:",
+        standardImagesError.message
+      );
+      // Continue with deletion even if we can't get the standard images
+    }
+
+    // 3. Get all product documentation before deletion
     const { data: documentation, error: docsError } = await supabase
       .from("documentation")
       .select("file_url")
@@ -274,7 +387,7 @@ export async function deleteProduct(id: number): Promise<boolean> {
       // Continue with deletion even if we can't get the documentation
     }
 
-    // 3. Delete the product (this will cascade delete related records in the database)
+    // 4. Delete the product (this will cascade delete related records in the database)
     const { error } = await supabase.from("products").delete().eq("id", id);
 
     if (error) {
@@ -282,9 +395,9 @@ export async function deleteProduct(id: number): Promise<boolean> {
       return false;
     }
 
-    // 4. Clean up files from storage
+    // 5. Clean up files from storage
 
-    // 4.1 Delete all product images
+    // 5.1 Delete all product images
     if (productImages && productImages.length > 0) {
       for (const img of productImages) {
         if (img.image_url) {
@@ -293,7 +406,16 @@ export async function deleteProduct(id: number): Promise<boolean> {
       }
     }
 
-    // 4.2 Delete all documentation files
+    // 5.2 Delete all standard images
+    if (standardImages && standardImages.length > 0) {
+      for (const img of standardImages) {
+        if (img.image_url) {
+          await deleteFile(img.image_url, "standard-images");
+        }
+      }
+    }
+
+    // 5.3 Delete all documentation files
     if (documentation && documentation.length > 0) {
       for (const doc of documentation) {
         if (doc.file_url) {
@@ -350,6 +472,52 @@ export async function deleteProductImage(imageId: number): Promise<boolean> {
 }
 
 /**
+ * Delete standard image by ID
+ */
+export async function deleteStandardImage(imageId: number): Promise<boolean> {
+  try {
+    // First get the image URL so we can delete the file from storage
+    const { data: image, error: fetchError } = await supabase
+      .from("standard_images")
+      .select("image_url")
+      .eq("id", imageId)
+      .single();
+
+    if (fetchError) {
+      console.error(
+        "Error fetching standard image to delete:",
+        fetchError.message
+      );
+      return false;
+    }
+
+    // Delete the image record from the database
+    const { error: deleteError } = await supabase
+      .from("standard_images")
+      .delete()
+      .eq("id", imageId);
+
+    if (deleteError) {
+      console.error(
+        "Error deleting standard image record:",
+        deleteError.message
+      );
+      return false;
+    }
+
+    // Delete the file from storage
+    if (image && image.image_url) {
+      await deleteFile(image.image_url, "standard-images");
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in deleteStandardImage:", error);
+    return false;
+  }
+}
+
+/**
  * Add new images to an existing product
  */
 export async function addProductImages(
@@ -392,6 +560,56 @@ export async function addProductImages(
     return true;
   } catch (error) {
     console.error("Error in addProductImages:", error);
+    return false;
+  }
+}
+
+/**
+ * Add new standard images to an existing product
+ */
+export async function addStandardImages(
+  productId: number,
+  standardImageFiles: File[]
+): Promise<boolean> {
+  try {
+    if (standardImageFiles.length === 0) return true;
+
+    // Upload each file to Supabase storage
+    const standardImageUploadPromises = standardImageFiles.map((file) =>
+      uploadFile(file, "standard-images")
+    );
+
+    const standardImageUrls = await Promise.all(standardImageUploadPromises);
+    const validStandardImageUrls = standardImageUrls.filter(
+      (url): url is string => url !== null
+    );
+
+    if (validStandardImageUrls.length === 0) {
+      console.error("No valid standard image URLs were generated");
+      return false;
+    }
+
+    // Create standard image records in the database
+    const standardImageRecords = validStandardImageUrls.map((url) => ({
+      image_url: url,
+      product: productId,
+    }));
+
+    const { error: standardImagesError } = await supabase
+      .from("standard_images")
+      .insert(standardImageRecords);
+
+    if (standardImagesError) {
+      console.error(
+        "Error saving standard image records:",
+        standardImagesError.message
+      );
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in addStandardImages:", error);
     return false;
   }
 }
