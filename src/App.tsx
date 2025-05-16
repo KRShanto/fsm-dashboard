@@ -1,9 +1,16 @@
 import { useEffect } from "react";
 import { useState } from "react";
-import Dashboard from "./Dashboard";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./components/Login";
 import supabase from "./supabase-client";
 import type { Session } from "@supabase/supabase-js";
+import DashboardLayout from "./layouts/DashboardLayout";
+import HomePage from "./pages/HomePage";
+import ProductsPage from "./pages/ProductsPage";
+import ProductDetailPage from "./pages/ProductDetailPage";
+import NewProductPage from "./pages/NewProductPage";
+import EditProductPage from "./pages/EditProductPage";
+import NotFoundPage from "./pages/NotFoundPage";
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -63,7 +70,22 @@ function App() {
     return <Login />;
   }
 
-  return <Dashboard />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<DashboardLayout />}>
+          <Route index element={<HomePage />} />
+          <Route path="products">
+            <Route index element={<ProductsPage />} />
+            <Route path="new" element={<NewProductPage />} />
+            <Route path=":id" element={<ProductDetailPage />} />
+            <Route path=":id/edit" element={<EditProductPage />} />
+          </Route>
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 export default App;

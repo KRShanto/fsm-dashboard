@@ -354,7 +354,7 @@ const DocumentationUploadField = ({
   );
 };
 
-export default function ProductForm() {
+export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
   const [formData, setFormData] = useState<ProductFormData>({
     subheading: "",
     heading: "",
@@ -555,33 +555,32 @@ export default function ProductForm() {
         }));
 
       // Save the product with images and documentation
-      const productId = await createProduct(
-        productData,
-        imageFiles,
-        documentationFiles
-      );
+      await createProduct(productData, imageFiles, documentationFiles);
 
-      if (productId) {
-        setSubmitSuccess(true);
-        // Reset form after successful submission
-        setFormData({
-          subheading: "",
-          heading: "",
-          short_description: "",
-          reference: "",
-          technical_file_url: "",
-          size: [],
-          sectors: [],
-          long_description: "",
-          images: [],
-          standards: "",
-          documentation: [{ name: "", file: undefined }],
-          brand: "",
-        });
-        setValidationErrors({});
-      } else {
-        setSubmitError("Failed to save product. Please try again.");
+      setSubmitSuccess(true);
+      setIsSubmitting(false);
+
+      // Call onSuccess callback if provided
+      if (onSuccess) {
+        onSuccess();
       }
+
+      // Reset form after successful submission
+      setFormData({
+        subheading: "",
+        heading: "",
+        short_description: "",
+        reference: "",
+        technical_file_url: "",
+        size: [],
+        sectors: [],
+        long_description: "",
+        images: [],
+        standards: "",
+        documentation: [{ name: "", file: undefined }],
+        brand: "",
+      });
+      setValidationErrors({});
     } catch (error) {
       if (error instanceof z.ZodError) {
         // Convert Zod errors to a more usable format
