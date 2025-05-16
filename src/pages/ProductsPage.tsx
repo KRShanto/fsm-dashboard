@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import ProductsList from "../components/ProductsList";
-import { FiArrowLeft } from "react-icons/fi";
+import PageTitle from "../components/PageTitle";
+import PageHeader from "../components/PageHeader";
 
 export default function ProductsPage() {
   const navigate = useNavigate();
@@ -13,24 +14,24 @@ export default function ProductsPage() {
     navigate("/");
   };
 
+  const addProductButton = (
+    <Link
+      to="/products/new"
+      className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
+    >
+      Add Product
+    </Link>
+  );
+
   return (
     <>
-      <div className="flex items-center mb-6">
-        <button
-          onClick={handleBack}
-          className="flex items-center text-foreground hover:text-primary mr-4 cursor-pointer"
-        >
-          <FiArrowLeft className="mr-1" /> Back to Dashboard
-        </button>
-        <h1 className="text-2xl font-bold text-foreground">Products</h1>
-        <div className="flex-grow"></div>
-        <Link
-          to="/products/new"
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
-        >
-          Add Product
-        </Link>
-      </div>
+      <PageTitle title="Products" />
+      <PageHeader
+        title="Products"
+        onBack={handleBack}
+        backLabel="Back to Dashboard"
+        actions={addProductButton}
+      />
       <ProductsList onProductSelect={handleProductSelect} />
     </>
   );

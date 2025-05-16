@@ -1,12 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { z } from "zod";
-import {
-  FiPlus,
-  FiTrash2,
-  FiUpload,
-  FiFile,
-  FiArrowLeft,
-} from "react-icons/fi";
+import { FiPlus, FiTrash2, FiUpload, FiFile } from "react-icons/fi";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -335,7 +329,7 @@ const DocumentationUploadField = ({
               <button
                 type="button"
                 onClick={onRemove}
-                className="p-2 text-destructive hover:bg-destructive/10 rounded-md"
+                className="p-2 text-destructive hover:bg-destructive/10 rounded-md cursor-pointer"
                 aria-label="Remove documentation"
               >
                 <FiTrash2 />
@@ -367,14 +361,14 @@ const DocumentationUploadField = ({
                 href={doc.file_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-2 bg-primary/10 text-primary rounded-md hover:bg-primary/20 flex items-center"
+                className="px-3 py-2 bg-primary/10 text-primary rounded-md hover:bg-primary/20 flex items-center cursor-pointer"
               >
                 <FiFile className="mr-2" /> View Current File
               </a>
               <button
                 type="button"
                 onClick={() => onDocChange("file_url", "")}
-                className="px-3 py-2 text-destructive hover:bg-destructive/10 rounded-md"
+                className="px-3 py-2 text-destructive hover:bg-destructive/10 rounded-md cursor-pointer"
               >
                 Replace
               </button>
@@ -819,15 +813,6 @@ export default function EditProductForm({
 
   return (
     <div>
-      <button
-        onClick={onBack}
-        className="flex items-center text-gray-600 hover:text-gray-900 mb-6"
-      >
-        <FiArrowLeft className="mr-2" /> Back to Products
-      </button>
-
-      <h2 className="text-2xl font-bold mb-6">Edit Product</h2>
-
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Product Information Section */}
         <div className="bg-card rounded-lg p-6 shadow-sm">
@@ -1115,13 +1100,13 @@ export default function EditProductForm({
                         <img
                           src={URL.createObjectURL(img.file)}
                           alt={`Standard ${idx + 1}`}
-                          className="w-full h-full object-contain"
+                          className="w-full h-full object-contain cursor-pointer"
                         />
                       ) : img.image_url ? (
                         <img
                           src={img.image_url}
                           alt={`Standard ${idx + 1}`}
-                          className="w-full h-full object-contain"
+                          className="w-full h-full object-contain cursor-pointer"
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full">
@@ -1131,7 +1116,7 @@ export default function EditProductForm({
                       <button
                         type="button"
                         onClick={() => removeImage(idx, "standards_images")}
-                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                         aria-label="Remove image"
                       >
                         <FiTrash2 size={16} />
@@ -1197,7 +1182,7 @@ export default function EditProductForm({
             <button
               type="button"
               onClick={addDocumentationField}
-              className="flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              className="flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
             >
               <FiPlus className="mr-1" /> Add Documentation
             </button>
@@ -1231,14 +1216,14 @@ export default function EditProductForm({
           <button
             type="button"
             onClick={onBack}
-            className="px-4 py-2 border border-input bg-background text-foreground rounded-md hover:bg-muted/50"
+            className="px-4 py-2 border border-input bg-background text-foreground rounded-md hover:bg-muted/50 cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center cursor-pointer"
           >
             {isSubmitting ? (
               <>

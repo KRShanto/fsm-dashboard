@@ -4,7 +4,7 @@ import { getDocumentationByProductId } from "../lib/documentation-service";
 import type { Product, StandardImage } from "../lib/product-service";
 import type { Documentation } from "../lib/documentation-service";
 import DocumentationList from "./DocumentationList";
-import { FiArrowLeft, FiEdit, FiTrash2 } from "react-icons/fi";
+import { FiEdit, FiTrash2 } from "react-icons/fi";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ interface ProductDetailsProps {
   onBack: () => void;
   onEdit?: (id: number) => void;
   onDelete?: (id: number) => void;
+  showHeader?: boolean;
 }
 
 export default function ProductDetails({
@@ -29,6 +30,7 @@ export default function ProductDetails({
   onBack,
   onEdit,
   onDelete,
+  showHeader = false,
 }: ProductDetailsProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [images, setImages] = useState<{ image_url: string }[]>([]);
@@ -122,7 +124,7 @@ export default function ProductDetails({
         <p>{error || "Product not found"}</p>
         <button
           onClick={onBack}
-          className="mt-4 px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50"
+          className="mt-4 px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 cursor-pointer"
         >
           Go Back
         </button>
@@ -135,6 +137,28 @@ export default function ProductDetails({
     typeof product.sectors === "string"
       ? JSON.parse(product.sectors)
       : product.sectors;
+
+  const actionButtons = (
+    <div className="flex space-x-3">
+      {onEdit && (
+        <button
+          onClick={() => onEdit(productId)}
+          className="flex items-center px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 cursor-pointer"
+        >
+          <FiEdit className="mr-2" /> Edit Product
+        </button>
+      )}
+
+      <button
+        onClick={() => setDeleteDialogOpen(true)}
+        disabled={isDeleting}
+        className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+      >
+        <FiTrash2 className="mr-2" />{" "}
+        {isDeleting ? "Deleting..." : "Delete Product"}
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-8">
@@ -153,7 +177,7 @@ export default function ProductDetails({
             <AlertDialogAction
               onClick={handleDeleteProduct}
               disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600 cursor-pointer"
             >
               {isDeleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
@@ -161,35 +185,8 @@ export default function ProductDetails({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <button
-          onClick={onBack}
-          className="flex items-center text-gray-600 hover:text-gray-900"
-        >
-          <FiArrowLeft className="mr-2" /> Back to Products
-        </button>
-
-        <div className="flex space-x-3">
-          {onEdit && (
-            <button
-              onClick={() => onEdit(productId)}
-              className="flex items-center px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
-            >
-              <FiEdit className="mr-2" /> Edit Product
-            </button>
-          )}
-
-          <button
-            onClick={() => setDeleteDialogOpen(true)}
-            disabled={isDeleting}
-            className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-          >
-            <FiTrash2 className="mr-2" />{" "}
-            {isDeleting ? "Deleting..." : "Delete Product"}
-          </button>
-        </div>
-      </div>
+      {/* Header - only rendered if showHeader is true */}
+      {showHeader && <div className="flex justify-end">{actionButtons}</div>}
 
       {/* Product Information */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -216,7 +213,7 @@ export default function ProductDetails({
                 <button
                   key={idx}
                   onClick={() => setActiveImageIndex(idx)}
-                  className={`w-16 h-16 border-2 rounded overflow-hidden flex-shrink-0 ${
+                  className={`w-16 h-16 border-2 rounded overflow-hidden flex-shrink-0 cursor-pointer ${
                     idx === activeImageIndex
                       ? "border-primary"
                       : "border-transparent"
@@ -259,7 +256,7 @@ export default function ProductDetails({
                 href={product.technical_file_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
+                className="text-blue-600 hover:underline cursor-pointer"
               >
                 View Technical File
               </a>
@@ -328,7 +325,7 @@ export default function ProductDetails({
                       href={img.image_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block w-full h-full"
+                      className="block w-full h-full cursor-pointer"
                     >
                       <img
                         src={img.image_url}

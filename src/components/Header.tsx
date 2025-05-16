@@ -11,9 +11,12 @@ export default function Header() {
     <header className="bg-card shadow-sm">
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-foreground">
-            Fire and Safety Management
-          </h1>
+          <NavLink
+            to="/"
+            className="text-2xl font-bold text-foreground hover:text-foreground"
+          >
+            Fire & Safety Management
+          </NavLink>
           <nav className="flex space-x-6 items-center">
             <NavLink
               to="/"
@@ -38,7 +41,7 @@ export default function Header() {
             </NavLink>
             <button
               onClick={handleSignOut}
-              className="ml-4 px-3 py-1 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 flex items-center cursor-pointer"
+              className="ml-4 px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center cursor-pointer"
             >
               <FiLogOut className="mr-1" /> Sign Out
             </button>

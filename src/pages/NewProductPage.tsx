@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import ProductForm from "../components/ProductForm";
-import { FiArrowLeft } from "react-icons/fi";
+import PageTitle from "../components/PageTitle";
+import PageHeader from "../components/PageHeader";
 
 export default function NewProductPage() {
   const navigate = useNavigate();
@@ -14,17 +15,10 @@ export default function NewProductPage() {
   };
 
   return (
-    <div>
-      <div className="flex items-center mb-6">
-        <button
-          onClick={handleBack}
-          className="flex items-center text-foreground hover:text-primary mr-4 cursor-pointer"
-        >
-          <FiArrowLeft className="mr-1" /> Back
-        </button>
-        <h1 className="text-2xl font-bold text-foreground">Add New Product</h1>
-      </div>
+    <>
+      <PageTitle title="Add New Product" />
+      <PageHeader title="Add New Product" onBack={handleBack} />
       <ProductForm onSuccess={handleSuccess} />
-    </div>
+    </>
   );
 }

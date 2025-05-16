@@ -918,7 +918,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
                     <img
                       src={URL.createObjectURL(img.file)}
                       alt={`Standard ${idx + 1}`}
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-contain cursor-pointer"
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full">
@@ -928,7 +928,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
                   <button
                     type="button"
                     onClick={() => removeImage(idx, "standards_images")}
-                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                     aria-label="Remove image"
                   >
                     <FiTrash2 size={16} />
@@ -988,7 +988,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
           <button
             type="button"
             onClick={addDocumentationField}
-            className="flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            className="flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
           >
             <FiPlus className="mr-1" /> Add Documentation
           </button>
@@ -1021,14 +1021,14 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
       <div className="flex justify-end space-x-4">
         <button
           type="button"
-          className="px-4 py-2 border border-input bg-background text-foreground rounded-md hover:bg-muted/50"
+          className="px-4 py-2 border border-input bg-background text-foreground rounded-md hover:bg-muted/50 cursor-pointer"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={isSubmitting}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center cursor-pointer"
         >
           {isSubmitting ? (
             <>
