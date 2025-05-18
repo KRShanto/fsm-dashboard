@@ -284,12 +284,12 @@ export default function CategoriesPage() {
                 <button
                   type="button"
                   onClick={() => toggleExpand(node.id as number)}
-                  className="mr-2 text-gray-500 focus:outline-none h-6 w-6 flex items-center justify-center"
+                  className="mr-2 text-gray-500 hover:text-primary focus:outline-none h-8 w-8 flex items-center justify-center text-xl bg-gray-50 hover:bg-gray-100 rounded-md transition-colors"
                 >
                   {isExpanded ? "-" : "+"}
                 </button>
               ) : (
-                <span className="w-6 h-6 mr-2"></span>
+                <span className="w-8 h-8 mr-2"></span>
               )}
 
               <div className="flex-1">{renderCategoryItem(node)}</div>
