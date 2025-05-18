@@ -8,6 +8,8 @@ import { useDropzone } from "react-dropzone";
 import { createProduct } from "../lib/product-service";
 import ProductImageGrid from "./ProductImageGrid";
 import { toast } from "sonner";
+import CategorySelector from "./CategorySelector";
+import { associateProductWithCategories } from "../lib/category-service";
 
 // Define schemas using Zod
 const DocumentSchema = z.object({
@@ -37,6 +39,7 @@ const ProductSchema = z.object({
   ),
   documentation: z.array(DocumentSchema).default([]),
   brand: z.string().optional(),
+  categories: z.array(z.number()).default([]),
 });
 
 type ProductFormData = z.infer<typeof ProductSchema>;
@@ -375,6 +378,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
     standards_images: [],
     documentation: [{ name: "", file: undefined }],
     brand: "",
+    categories: [],
   });
 
   const [validationErrors, setValidationErrors] = useState<
@@ -534,6 +538,13 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
     });
   };
 
+  const handleCategoriesChange = (categoryIds: number[]) => {
+    setFormData({
+      ...formData,
+      categories: categoryIds,
+    });
+  };
+
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -583,51 +594,40 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
       }));
 
       // Save the product with images and documentation
-      await createProduct(
+      const productId = await createProduct(
         productData,
         imageFiles,
         documentationFiles,
         standardsImageFiles
       );
 
-      // Show success toast
-      toast.success("Product successfully saved!");
+      if (productId) {
+        // Associate the product with categories if any
+        if (validatedData.categories.length > 0) {
+          await associateProductWithCategories(
+            productId,
+            validatedData.categories
+          );
+        }
 
-      // Call onSuccess callback if provided
-      if (onSuccess) {
-        onSuccess();
+        toast.success("Product created successfully!");
+        if (onSuccess) onSuccess();
+      } else {
+        toast.error("Failed to create product");
       }
-
-      // Reset form after successful submission
-      setFormData({
-        subheading: "",
-        heading: "",
-        short_description: "",
-        reference: "",
-        technical_file_url: "",
-        size: [],
-        sectors: [],
-        long_description: "",
-        images: [],
-        standards: "",
-        standards_images: [],
-        documentation: [{ name: "", file: undefined }],
-        brand: "",
-      });
-      setValidationErrors({});
     } catch (error) {
       if (error instanceof z.ZodError) {
-        // Convert Zod errors to a more usable format
-        const errors: Partial<Record<keyof ProductFormData, string>> = {};
+        // Format validation errors
+        const errors: Record<string, string> = {};
         error.errors.forEach((err) => {
           const path = err.path.join(".");
           errors[path as keyof ProductFormData] = err.message;
         });
         setValidationErrors(errors);
-        toast.error("Please fix the validation errors and try again.");
+        toast.error("Please fix the form errors");
       } else {
-        console.error("Submission failed:", error);
-        toast.error("An unexpected error occurred. Please try again.");
+        console.error("Error creating product:", error);
+        toast.error("An error occurred while creating the product");
       }
     } finally {
       setIsSubmitting(false);
@@ -1012,6 +1012,25 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
           {validationErrors.documentation && (
             <p className="text-destructive text-sm">
               {validationErrors.documentation}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Categories Section */}
+      <div className="bg-card rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-foreground mb-4">Categories</h3>
+        <div className="space-y-4">
+          <label className="text-sm font-medium text-foreground block">
+            Assign this product to categories
+          </label>
+          <CategorySelector
+            selectedCategories={formData.categories}
+            onChange={handleCategoriesChange}
+          />
+          {validationErrors.categories && (
+            <p className="text-destructive text-sm">
+              {validationErrors.categories}
             </p>
           )}
         </div>

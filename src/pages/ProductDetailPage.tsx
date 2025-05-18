@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import ProductDetails from "../components/ProductDetails";
 import PageTitle from "../components/PageTitle";
 import PageHeader from "../components/PageHeader";
+import CategoryBreadcrumb from "../components/CategoryBreadcrumb";
 import { useEffect, useState } from "react";
 import { getProductById } from "../lib/product-service";
 import { FiEdit } from "react-icons/fi";
@@ -62,6 +63,7 @@ export default function ProductDetailPage() {
         onBack={handleBack}
         actions={actionButtons}
       />
+      <CategoryBreadcrumb productId={productId} />
       <ProductDetails
         productId={productId}
         onBack={handleBack}

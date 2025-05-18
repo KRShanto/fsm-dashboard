@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import supabase from "../supabase-client";
-import { FiHome, FiPackage, FiLogOut } from "react-icons/fi";
+import { FiHome, FiPackage, FiTag, FiLogOut } from "react-icons/fi";
 
 export default function Header() {
   const handleSignOut = async () => {
@@ -38,6 +38,16 @@ export default function Header() {
               }
             >
               <FiPackage className="mr-1" /> Products
+            </NavLink>
+            <NavLink
+              to="/categories"
+              className={({ isActive }) =>
+                isActive
+                  ? "text-primary font-medium flex items-center cursor-pointer"
+                  : "text-foreground hover:text-primary flex items-center cursor-pointer"
+              }
+            >
+              <FiTag className="mr-1" /> Categories
             </NavLink>
             <button
               onClick={handleSignOut}

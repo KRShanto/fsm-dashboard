@@ -13,6 +13,11 @@ import {
 } from "../lib/documentation-service";
 import ProductImageGrid from "./ProductImageGrid";
 import { toast } from "sonner";
+import CategorySelector from "./CategorySelector";
+import {
+  associateProductWithCategories,
+  getCategoriesByProductId,
+} from "../lib/category-service";
 
 // Schema definitions - reused from ProductForm
 const DocumentSchema = z.object({
@@ -51,6 +56,7 @@ const ProductSchema = z.object({
   ),
   documentation: z.array(DocumentSchema),
   brand: z.string().optional(),
+  categories: z.array(z.number()).default([]),
 });
 
 type ProductFormData = z.infer<typeof ProductSchema>;
@@ -419,6 +425,7 @@ export default function EditProductForm({
     standards_images: [],
     documentation: [],
     brand: "",
+    categories: [],
   });
 
   const [validationErrors, setValidationErrors] = useState<
@@ -449,6 +456,9 @@ export default function EditProductForm({
 
         // Get documentation
         const docsData = await getDocumentationByProductId(productId);
+
+        // Get product categories
+        const productCategories = await getCategoriesByProductId(productId);
 
         // Format sizes
         const sizeArray = productData.size
@@ -490,6 +500,7 @@ export default function EditProductForm({
           })),
           standards: productData.standards || "",
           brand: productData.brand || "",
+          categories: productCategories,
         });
 
         setIsLoading(false);
@@ -683,6 +694,15 @@ export default function EditProductForm({
     });
   };
 
+  const handleCategoriesChange = (categoryIds: number[]) => {
+    if (!formData) return;
+
+    setFormData({
+      ...formData,
+      categories: categoryIds,
+    });
+  };
+
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -690,10 +710,18 @@ export default function EditProductForm({
     setValidationErrors({});
 
     try {
-      // Validate the form data with Zod
-      const validatedData = ProductSchema.parse(formData);
+      // Filter to only include documentation with valid files or IDs
+      const validDocumentation = formData.documentation.filter(
+        (doc) => (doc.id && !doc.toDelete) || doc.file
+      );
 
-      // Prepare product data for submission
+      // Validate the form data with Zod
+      const validatedData = ProductSchema.parse({
+        ...formData,
+        documentation: validDocumentation,
+      });
+
+      // Prepare product data for update
       const productData = {
         heading: validatedData.heading,
         subheading: validatedData.subheading,
@@ -701,15 +729,15 @@ export default function EditProductForm({
         reference: validatedData.reference,
         technical_file_url: validatedData.technical_file_url || "",
         size: validatedData.size.join(", "), // Convert array to comma-separated string
-        sectors: validatedData.sectors, // This is already an array and will be stored as JSON
+        sectors: validatedData.sectors,
         long_description: validatedData.long_description,
         standards: validatedData.standards,
         brand: validatedData.brand,
       };
 
-      // Get new image files (those without IDs)
+      // Get the image files to add
       const newImageFiles = formData.images
-        .filter((img) => img.file && !img.id)
+        .filter((img) => img.file)
         .map((img) => img.file)
         .filter((file): file is File => file !== undefined);
 
@@ -718,9 +746,9 @@ export default function EditProductForm({
         .filter((img) => img.id && img.toDelete)
         .map((img) => img.id as number);
 
-      // Get new standard image files (those without IDs)
+      // Get the standard image files to add
       const newStandardImageFiles = formData.standards_images
-        .filter((img) => img.file && !img.id)
+        .filter((img) => img.file)
         .map((img) => img.file)
         .filter((file): file is File => file !== undefined);
 
@@ -729,25 +757,8 @@ export default function EditProductForm({
         .filter((img) => img.id && img.toDelete)
         .map((img) => img.id as number);
 
-      // Handle documentation changes
-      const docsToDelete = formData.documentation
-        .filter((doc) => doc.id && doc.toDelete)
-        .map((doc) => doc.id as number);
-
-      // Delete marked documentation
-      if (docsToDelete.length > 0) {
-        for (const docId of docsToDelete) {
-          await deleteDocumentation(docId);
-        }
-      }
-
-      // Prepare new documentation files
-      const newDocs = formData.documentation.filter(
-        (doc) => !doc.id && doc.file && doc.name.trim() !== ""
-      );
-
-      // Update the product with new data and images
-      const success = await updateProduct(
+      // Update the product
+      const updated = await updateProduct(
         productId,
         productData,
         newImageFiles,
@@ -756,486 +767,508 @@ export default function EditProductForm({
         deleteStandardImageIds
       );
 
-      if (success) {
-        // Upload any new documentation
-        if (newDocs.length > 0) {
-          const docFiles = newDocs.map((doc) => ({
+      if (updated) {
+        // Handle documentation to delete
+        const docsToDelete = formData.documentation
+          .filter((doc) => doc.id && doc.toDelete)
+          .map((doc) => doc.id as number);
+
+        if (docsToDelete.length > 0) {
+          for (const docId of docsToDelete) {
+            await deleteDocumentation(docId);
+          }
+        }
+
+        // Handle new documentation to add
+        const newDocs = formData.documentation
+          .filter((doc) => doc.file && doc.name.trim() !== "")
+          .map((doc) => ({
             name: doc.name,
             file: doc.file as File,
           }));
 
-          try {
-            await uploadDocumentation(productId, docFiles);
-          } catch (error) {
-            console.error("Error uploading documentation:", error);
-            toast.error("Some documentation files could not be uploaded");
-          }
+        if (newDocs.length > 0) {
+          await uploadDocumentation(productId, newDocs);
         }
 
-        toast.success("Product successfully updated!");
+        // Update product categories
+        await associateProductWithCategories(
+          productId,
+          validatedData.categories
+        );
 
-        // Call onSuccess callback if provided
-        if (onSuccess) {
-          onSuccess();
-        }
+        toast.success("Product updated successfully!");
+        if (onSuccess) onSuccess();
       } else {
-        toast.error("Failed to update product. Please try again.");
+        toast.error("Failed to update product");
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        // Convert Zod errors to a more usable format
-        const errors: Partial<Record<keyof ProductFormData, string>> = {};
+        // Format validation errors
+        const errors: Record<string, string> = {};
         error.errors.forEach((err) => {
           const path = err.path.join(".");
           errors[path as keyof ProductFormData] = err.message;
         });
         setValidationErrors(errors);
-        toast.error("Please fix the validation errors and try again.");
+        toast.error("Please fix the form errors");
       } else {
-        console.error("Submission failed:", error);
-        toast.error("An unexpected error occurred. Please try again.");
+        console.error("Error updating product:", error);
+        toast.error("An error occurred while updating the product");
       }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (isLoading || !formData) {
+  if (isLoading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="text-center">
-          <div className="h-8 w-8 border-4 border-t-transparent border-primary rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500">Loading product data...</p>
+      <div className="p-8 flex justify-center">
+        <div className="flex items-center justify-center text-primary">
+          <div className="animate-spin h-12 w-12 border-4 border-current border-opacity-20 rounded-full border-t-current"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Product Information Section */}
-        <div className="bg-card rounded-lg p-6 shadow-sm">
-          <h3 className="text-lg font-medium text-foreground mb-4">
-            Product Information
-          </h3>
+    <form onSubmit={handleSubmit} className="space-y-8">
+      {/* Product Information Section */}
+      <div className="bg-card rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-foreground mb-4">
+          Product Information
+        </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Subheading */}
-            <div className="space-y-2">
-              <label
-                htmlFor="subheading"
-                className="text-sm font-medium text-foreground"
-              >
-                Subheading
-              </label>
-              <input
-                type="text"
-                id="subheading"
-                name="subheading"
-                value={formData.subheading}
-                onChange={handleTextChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {validationErrors.subheading && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.subheading}
-                </p>
-              )}
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Subheading */}
+          <div className="space-y-2">
+            <label
+              htmlFor="subheading"
+              className="text-sm font-medium text-foreground"
+            >
+              Subheading
+            </label>
+            <input
+              type="text"
+              id="subheading"
+              name="subheading"
+              value={formData.subheading}
+              onChange={handleTextChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {validationErrors.subheading && (
+              <p className="text-destructive text-sm">
+                {validationErrors.subheading}
+              </p>
+            )}
+          </div>
 
-            {/* Heading */}
-            <div className="space-y-2">
-              <label
-                htmlFor="heading"
-                className="text-sm font-medium text-foreground"
-              >
-                Heading
-              </label>
-              <input
-                type="text"
-                id="heading"
-                name="heading"
-                value={formData.heading}
-                onChange={handleTextChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {validationErrors.heading && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.heading}
-                </p>
-              )}
-            </div>
+          {/* Heading */}
+          <div className="space-y-2">
+            <label
+              htmlFor="heading"
+              className="text-sm font-medium text-foreground"
+            >
+              Heading
+            </label>
+            <input
+              type="text"
+              id="heading"
+              name="heading"
+              value={formData.heading}
+              onChange={handleTextChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {validationErrors.heading && (
+              <p className="text-destructive text-sm">
+                {validationErrors.heading}
+              </p>
+            )}
+          </div>
 
-            {/* Reference */}
-            <div className="space-y-2">
-              <label
-                htmlFor="reference"
-                className="text-sm font-medium text-foreground"
-              >
-                Reference
-              </label>
-              <input
-                type="text"
-                id="reference"
-                name="reference"
-                value={formData.reference}
-                onChange={handleTextChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {validationErrors.reference && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.reference}
-                </p>
-              )}
-            </div>
+          {/* Reference */}
+          <div className="space-y-2">
+            <label
+              htmlFor="reference"
+              className="text-sm font-medium text-foreground"
+            >
+              Reference
+            </label>
+            <input
+              type="text"
+              id="reference"
+              name="reference"
+              value={formData.reference}
+              onChange={handleTextChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {validationErrors.reference && (
+              <p className="text-destructive text-sm">
+                {validationErrors.reference}
+              </p>
+            )}
+          </div>
 
-            {/* Brand */}
-            <div className="space-y-2">
-              <label
-                htmlFor="brand"
-                className="text-sm font-medium text-foreground"
-              >
-                Brand
-              </label>
-              <input
-                type="text"
-                id="brand"
-                name="brand"
-                value={formData.brand}
-                onChange={handleTextChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {validationErrors.brand && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.brand}
-                </p>
-              )}
-            </div>
+          {/* Brand */}
+          <div className="space-y-2">
+            <label
+              htmlFor="brand"
+              className="text-sm font-medium text-foreground"
+            >
+              Brand
+            </label>
+            <input
+              type="text"
+              id="brand"
+              name="brand"
+              value={formData.brand}
+              onChange={handleTextChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {validationErrors.brand && (
+              <p className="text-destructive text-sm">
+                {validationErrors.brand}
+              </p>
+            )}
+          </div>
 
-            {/* Technical File URL */}
-            <div className="space-y-2">
-              <label
-                htmlFor="technical_file_url"
-                className="text-sm font-medium text-foreground"
-              >
-                Technical File URL
-              </label>
-              <input
-                type="url"
-                id="technical_file_url"
-                name="technical_file_url"
-                value={formData.technical_file_url}
-                onChange={handleTextChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {validationErrors.technical_file_url && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.technical_file_url}
-                </p>
-              )}
-            </div>
+          {/* Technical File URL */}
+          <div className="space-y-2">
+            <label
+              htmlFor="technical_file_url"
+              className="text-sm font-medium text-foreground"
+            >
+              Technical File URL
+            </label>
+            <input
+              type="url"
+              id="technical_file_url"
+              name="technical_file_url"
+              value={formData.technical_file_url}
+              onChange={handleTextChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {validationErrors.technical_file_url && (
+              <p className="text-destructive text-sm">
+                {validationErrors.technical_file_url}
+              </p>
+            )}
+          </div>
 
-            {/* Short Description - Full width */}
-            <div className="space-y-2 col-span-1 md:col-span-2">
-              <label
-                htmlFor="short_description"
-                className="text-sm font-medium text-foreground"
-              >
-                Short Description
-              </label>
-              <textarea
-                id="short_description"
-                name="short_description"
-                rows={3}
-                value={formData.short_description}
-                onChange={handleTextChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {validationErrors.short_description && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.short_description}
-                </p>
-              )}
-            </div>
+          {/* Short Description - Full width */}
+          <div className="space-y-2 col-span-1 md:col-span-2">
+            <label
+              htmlFor="short_description"
+              className="text-sm font-medium text-foreground"
+            >
+              Short Description
+            </label>
+            <textarea
+              id="short_description"
+              name="short_description"
+              rows={3}
+              value={formData.short_description}
+              onChange={handleTextChange}
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {validationErrors.short_description && (
+              <p className="text-destructive text-sm">
+                {validationErrors.short_description}
+              </p>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* Specifications Section */}
-        <div className="bg-card rounded-lg p-6 shadow-sm">
-          <h3 className="text-lg font-medium text-foreground mb-4">
-            Size and Sectors
-          </h3>
+      {/* Specifications Section */}
+      <div className="bg-card rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-foreground mb-4">
+          Size and Sectors
+        </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Size */}
-            <div className="space-y-4">
-              <label className="text-sm font-medium text-foreground block">
-                Size
-              </label>
-              <div className="grid grid-cols-5 gap-2">
-                {availableSizes.map((size) => (
-                  <div key={size} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={`size-${size}`}
-                      value={size}
-                      checked={formData.size.includes(size)}
-                      onChange={handleSizeChange}
-                      className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
-                    />
-                    <label
-                      htmlFor={`size-${size}`}
-                      className="ml-2 text-sm text-foreground"
-                    >
-                      {size}
-                    </label>
-                  </div>
-                ))}
-              </div>
-              {validationErrors.size && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.size}
-                </p>
-              )}
-            </div>
-
-            {/* Sectors */}
-            <div className="space-y-4">
-              <label className="text-sm font-medium text-foreground block">
-                Sectors
-              </label>
-              <TagInput
-                tags={formData.sectors}
-                setTags={handleSectorsChange}
-                placeholder="Type sector name and press Enter"
-              />
-              {validationErrors.sectors && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.sectors}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Detailed Information Section */}
-        <div className="bg-card rounded-lg p-6 shadow-sm">
-          <h3 className="text-lg font-medium text-foreground mb-4">
-            Detailed Information
-          </h3>
-
-          <div className="space-y-6">
-            {/* Long Description */}
-            <div className="space-y-2">
-              <label
-                htmlFor="long_description"
-                className="text-sm font-medium text-foreground"
-              >
-                Long Description (Rich Text)
-              </label>
-              <RichTextEditor
-                value={formData.long_description}
-                onChange={(value) =>
-                  handleRichTextChange("long_description", value)
-                }
-                placeholder="Enter detailed product description here..."
-              />
-              {validationErrors.long_description && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.long_description}
-                </p>
-              )}
-            </div>
-
-            {/* Standards */}
-            <div className="space-y-2">
-              <label
-                htmlFor="standards"
-                className="text-sm font-medium text-foreground"
-              >
-                Standards (Rich Text)
-              </label>
-              <RichTextEditor
-                value={formData.standards}
-                onChange={(value) => handleRichTextChange("standards", value)}
-                placeholder="Enter standards information here..."
-              />
-              {validationErrors.standards && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.standards}
-                </p>
-              )}
-            </div>
-
-            {/* Standards Images Section */}
-            <div className="space-y-4 mt-6">
-              <label className="text-sm font-medium text-foreground">
-                Standards Images
-              </label>
-
-              {/* Dropzone for Standards Images */}
-              <FileDropzone
-                file={undefined}
-                onFileDrop={(files) =>
-                  handleImageDrop(files, "standards_images")
-                }
-                acceptedFileTypes={{
-                  "image/*": [".jpeg", ".jpg", ".png", ".gif"],
-                }}
-                label="Drop standards images here or click to browse"
-                multiple={true}
-              />
-
-              {/* Standards Images Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {formData.standards_images
-                  .filter((img) => !img.toDelete)
-                  .map((img, idx) => (
-                    <div
-                      key={idx}
-                      className="relative group aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200"
-                    >
-                      {img.file ? (
-                        <img
-                          src={URL.createObjectURL(img.file)}
-                          alt={`Standard ${idx + 1}`}
-                          className="w-full h-full object-contain cursor-pointer"
-                        />
-                      ) : img.image_url ? (
-                        <img
-                          src={img.image_url}
-                          alt={`Standard ${idx + 1}`}
-                          className="w-full h-full object-contain cursor-pointer"
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-full">
-                          <span className="text-gray-400">No preview</span>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeImage(idx, "standards_images")}
-                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                        aria-label="Remove image"
-                      >
-                        <FiTrash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
-              </div>
-
-              {validationErrors.standards_images && (
-                <p className="text-destructive text-sm">
-                  {validationErrors.standards_images}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Images Section */}
-        <div className="bg-card rounded-lg p-6 shadow-sm">
-          <h3 className="text-lg font-medium text-foreground mb-4">
-            Product Images
-          </h3>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Size */}
           <div className="space-y-4">
-            {/* Single Dropzone */}
+            <label className="text-sm font-medium text-foreground block">
+              Size
+            </label>
+            <div className="grid grid-cols-5 gap-2">
+              {availableSizes.map((size) => (
+                <div key={size} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={`size-${size}`}
+                    value={size}
+                    checked={formData.size.includes(size)}
+                    onChange={handleSizeChange}
+                    className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                  />
+                  <label
+                    htmlFor={`size-${size}`}
+                    className="ml-2 text-sm text-foreground"
+                  >
+                    {size}
+                  </label>
+                </div>
+              ))}
+            </div>
+            {validationErrors.size && (
+              <p className="text-destructive text-sm">
+                {validationErrors.size}
+              </p>
+            )}
+          </div>
+
+          {/* Sectors */}
+          <div className="space-y-4">
+            <label className="text-sm font-medium text-foreground block">
+              Sectors
+            </label>
+            <TagInput
+              tags={formData.sectors}
+              setTags={handleSectorsChange}
+              placeholder="Type sector name and press Enter"
+            />
+            {validationErrors.sectors && (
+              <p className="text-destructive text-sm">
+                {validationErrors.sectors}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Detailed Information Section */}
+      <div className="bg-card rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-foreground mb-4">
+          Detailed Information
+        </h3>
+
+        <div className="space-y-6">
+          {/* Long Description */}
+          <div className="space-y-2">
+            <label
+              htmlFor="long_description"
+              className="text-sm font-medium text-foreground"
+            >
+              Long Description (Rich Text)
+            </label>
+            <RichTextEditor
+              value={formData.long_description}
+              onChange={(value) =>
+                handleRichTextChange("long_description", value)
+              }
+              placeholder="Enter detailed product description here..."
+            />
+            {validationErrors.long_description && (
+              <p className="text-destructive text-sm">
+                {validationErrors.long_description}
+              </p>
+            )}
+          </div>
+
+          {/* Standards */}
+          <div className="space-y-2">
+            <label
+              htmlFor="standards"
+              className="text-sm font-medium text-foreground"
+            >
+              Standards (Rich Text)
+            </label>
+            <RichTextEditor
+              value={formData.standards}
+              onChange={(value) => handleRichTextChange("standards", value)}
+              placeholder="Enter standards information here..."
+            />
+            {validationErrors.standards && (
+              <p className="text-destructive text-sm">
+                {validationErrors.standards}
+              </p>
+            )}
+          </div>
+
+          {/* Standards Images Section */}
+          <div className="space-y-4 mt-6">
+            <label className="text-sm font-medium text-foreground">
+              Standards Images
+            </label>
+
+            {/* Dropzone for Standards Images */}
             <FileDropzone
               file={undefined}
-              onFileDrop={(files) => handleImageDrop(files, "images")}
+              onFileDrop={(files) => handleImageDrop(files, "standards_images")}
               acceptedFileTypes={{
                 "image/*": [".jpeg", ".jpg", ".png", ".gif"],
               }}
-              label="Drop images here or click to browse"
+              label="Drop standards images here or click to browse"
               multiple={true}
             />
 
-            {/* Image Grid */}
-            <ProductImageGrid
-              images={formData.images
+            {/* Standards Images Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {formData.standards_images
                 .filter((img) => !img.toDelete)
-                .map((img) => ({
-                  id: img.id,
-                  file: img.file,
-                  image_url: img.image_url,
-                }))}
-              isUploading={isSubmitting}
-              onRemoveImage={(index) => removeImage(index, "images")}
-            />
+                .map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="relative group aspect-square bg-gray-100 rounded-lg overflow-hidden border border-gray-200"
+                  >
+                    {img.file ? (
+                      <img
+                        src={URL.createObjectURL(img.file)}
+                        alt={`Standard ${idx + 1}`}
+                        className="w-full h-full object-contain cursor-pointer"
+                      />
+                    ) : img.image_url ? (
+                      <img
+                        src={img.image_url}
+                        alt={`Standard ${idx + 1}`}
+                        className="w-full h-full object-contain cursor-pointer"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full">
+                        <span className="text-gray-400">No preview</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx, "standards_images")}
+                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      aria-label="Remove image"
+                    >
+                      <FiTrash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+            </div>
 
-            {validationErrors.images && (
+            {validationErrors.standards_images && (
               <p className="text-destructive text-sm">
-                {validationErrors.images}
+                {validationErrors.standards_images}
               </p>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Documentation Section */}
-        <div className="bg-card rounded-lg p-6 shadow-sm">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-foreground">
-              Documentation
-            </h3>
-            <button
-              type="button"
-              onClick={addDocumentationField}
-              className="flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
-            >
-              <FiPlus className="mr-1" /> Add Documentation
-            </button>
-          </div>
+      {/* Images Section */}
+      <div className="bg-card rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-foreground mb-4">
+          Product Images
+        </h3>
 
-          <div className="space-y-6">
-            {formData.documentation.map((doc, index) => (
-              <DocumentationUploadField
-                key={index}
-                doc={doc}
-                onDocChange={(field, value) =>
-                  handleDocumentationChange(index, field, value)
-                }
-                onFileChange={(file) =>
-                  handleDocumentationFileChange(index, file)
-                }
-                onRemove={() => removeDocumentationField(index)}
-                showRemoveButton={formData.documentation.length > 1}
-              />
-            ))}
-            {validationErrors.documentation && (
-              <p className="text-destructive text-sm">
-                {validationErrors.documentation}
-              </p>
-            )}
-          </div>
+        <div className="space-y-4">
+          {/* Single Dropzone */}
+          <FileDropzone
+            file={undefined}
+            onFileDrop={(files) => handleImageDrop(files, "images")}
+            acceptedFileTypes={{
+              "image/*": [".jpeg", ".jpg", ".png", ".gif"],
+            }}
+            label="Drop images here or click to browse"
+            multiple={true}
+          />
+
+          {/* Image Grid */}
+          <ProductImageGrid
+            images={formData.images
+              .filter((img) => !img.toDelete)
+              .map((img) => ({
+                id: img.id,
+                file: img.file,
+                image_url: img.image_url,
+              }))}
+            isUploading={isSubmitting}
+            onRemoveImage={(index) => removeImage(index, "images")}
+          />
+
+          {validationErrors.images && (
+            <p className="text-destructive text-sm">
+              {validationErrors.images}
+            </p>
+          )}
         </div>
+      </div>
 
-        {/* Form Actions */}
-        <div className="flex justify-end space-x-4">
+      {/* Documentation Section */}
+      <div className="bg-card rounded-lg p-6 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-foreground">Documentation</h3>
           <button
             type="button"
-            onClick={onBack}
-            className="px-4 py-2 border border-input bg-background text-foreground rounded-md hover:bg-muted/50 cursor-pointer"
+            onClick={addDocumentationField}
+            className="flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 cursor-pointer"
           >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center cursor-pointer"
-          >
-            {isSubmitting ? (
-              <>
-                <span className="mr-2">Updating...</span>
-                <div className="h-4 w-4 border-2 border-t-transparent border-primary-foreground rounded-full animate-spin"></div>
-              </>
-            ) : (
-              "Update Product"
-            )}
+            <FiPlus className="mr-1" /> Add Documentation
           </button>
         </div>
-      </form>
-    </div>
+
+        <div className="space-y-6">
+          {formData.documentation.map((doc, index) => (
+            <DocumentationUploadField
+              key={index}
+              doc={doc}
+              onDocChange={(field, value) =>
+                handleDocumentationChange(index, field, value)
+              }
+              onFileChange={(file) =>
+                handleDocumentationFileChange(index, file)
+              }
+              onRemove={() => removeDocumentationField(index)}
+              showRemoveButton={formData.documentation.length > 1}
+            />
+          ))}
+          {validationErrors.documentation && (
+            <p className="text-destructive text-sm">
+              {validationErrors.documentation}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Categories Section */}
+      <div className="bg-card rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-foreground mb-4">Categories</h3>
+        <div className="space-y-4">
+          <label className="text-sm font-medium text-foreground block">
+            Assign this product to categories
+          </label>
+          <CategorySelector
+            selectedCategories={formData.categories}
+            onChange={handleCategoriesChange}
+          />
+          {validationErrors.categories && (
+            <p className="text-destructive text-sm">
+              {validationErrors.categories}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Form Actions */}
+      <div className="flex justify-between pt-6">
+        <button
+          type="button"
+          onClick={onBack}
+          className="px-4 py-2 border border-input bg-background hover:bg-accent text-foreground rounded-md transition-colors"
+        >
+          Back to Products
+        </button>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md flex items-center transition-colors disabled:opacity-50"
+        >
+          {isSubmitting ? (
+            <>
+              <span className="h-4 w-4 mr-2 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></span>
+              Updating...
+            </>
+          ) : (
+            "Update Product"
+          )}
+        </button>
+      </div>
+    </form>
   );
 }

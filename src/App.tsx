@@ -10,6 +10,7 @@ import ProductsPage from "./pages/ProductsPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import NewProductPage from "./pages/NewProductPage";
 import EditProductPage from "./pages/EditProductPage";
+import CategoriesPage from "./pages/CategoriesPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import { Toaster } from "./components/ui/sonner";
 
@@ -83,6 +84,7 @@ function App() {
             <Route path=":id" element={<ProductDetailPage />} />
             <Route path=":id/edit" element={<EditProductPage />} />
           </Route>
+          <Route path="categories" element={<CategoriesPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
