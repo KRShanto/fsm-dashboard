@@ -25,9 +25,11 @@ export default function CategoriesPage() {
   const [newCategoryParent, setNewCategoryParent] = useState<number | null>(
     null
   );
+  const [newCategoryCountry, setNewCategoryCountry] = useState("");
   const [editName, setEditName] = useState("");
   const [editSlug, setEditSlug] = useState("");
   const [editParent, setEditParent] = useState<number | null>(null);
+  const [editCountry, setEditCountry] = useState("");
 
   useEffect(() => {
     fetchCategories();
@@ -51,12 +53,10 @@ export default function CategoriesPage() {
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) return;
 
-    // Disable the form during submission
     setIsSubmitting(true);
 
     let slug = newCategorySlug.trim();
     if (!slug) {
-      // Generate slug from name if not provided
       slug = newCategoryName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
@@ -68,13 +68,14 @@ export default function CategoriesPage() {
         name: newCategoryName.trim(),
         slug,
         parent: newCategoryParent,
+        country: newCategoryCountry.trim() || null,
       });
 
       if (categoryId) {
-        // Reset form and refresh categories
         setNewCategoryName("");
         setNewCategorySlug("");
         setNewCategoryParent(null);
+        setNewCategoryCountry("");
 
         // Fetch updated categories
         const data = await getAllCategories();
@@ -108,6 +109,7 @@ export default function CategoriesPage() {
     setEditName(category.name);
     setEditSlug(category.slug);
     setEditParent(category.parent || null);
+    setEditCountry(category.country || "");
   };
 
   const cancelEditing = () => {
@@ -115,6 +117,7 @@ export default function CategoriesPage() {
     setEditName("");
     setEditSlug("");
     setEditParent(null);
+    setEditCountry("");
   };
 
   const saveEdit = async (categoryId: number) => {
@@ -125,6 +128,7 @@ export default function CategoriesPage() {
         name: editName.trim(),
         slug: editSlug.trim(),
         parent: editParent,
+        country: editCountry.trim() || null,
       });
 
       // Refresh categories and exit edit mode
@@ -196,6 +200,13 @@ export default function CategoriesPage() {
               className="px-3 py-2 border border-input rounded-md"
               placeholder="category-slug"
             />
+            <input
+              type="text"
+              value={editCountry}
+              onChange={(e) => setEditCountry(e.target.value)}
+              className="px-3 py-2 border border-input rounded-md"
+              placeholder="Country (optional)"
+            />
             <select
               value={editParent || ""}
               onChange={(e) =>
@@ -237,6 +248,11 @@ export default function CategoriesPage() {
               {parentCategory && (
                 <span className="text-sm text-gray-500 ml-2">
                   (Parent: {parentCategory.name})
+                </span>
+              )}
+              {category.country && (
+                <span className="text-sm text-gray-500 ml-2">
+                  (Country: {category.country})
                 </span>
               )}
             </div>
@@ -314,7 +330,7 @@ export default function CategoriesPage() {
         <div className="p-6">
           <h2 className="text-xl font-semibold mb-4">Add New Category</h2>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label
                   htmlFor="name"
@@ -348,6 +364,24 @@ export default function CategoriesPage() {
                   onChange={(e) => setNewCategorySlug(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   placeholder="category-slug"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="country"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Country (optional)
+                </label>
+                <input
+                  type="text"
+                  id="country"
+                  value={newCategoryCountry}
+                  onChange={(e) => setNewCategoryCountry(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="Country"
                   disabled={isSubmitting}
                 />
               </div>

@@ -6,6 +6,7 @@ export interface Category {
   name: string;
   slug: string;
   parent?: number | null;
+  country?: string | null;
 }
 
 export interface CategoryNode extends Category {
