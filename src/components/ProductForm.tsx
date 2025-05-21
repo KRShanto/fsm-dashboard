@@ -1026,7 +1026,7 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void }) {
           </label>
           <CategorySelector
             selectedCategories={formData.categories}
-            onChange={handleCategoriesChange}
+            onCategoryChange={handleCategoriesChange}
           />
           {validationErrors.categories && (
             <p className="text-destructive text-sm">
